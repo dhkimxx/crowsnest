@@ -1,0 +1,44 @@
+{
+  "object_kind": "pipeline",
+  "user": {
+    "id": 7,
+    "name": "Pipeline Trigger",
+    "username": "pipeline-trigger",
+    "email": "trigger@example.com"
+  },
+  "project": {
+    "id": 76,
+    "name": "Project",
+    "path_with_namespace": "group/project",
+    "web_url": "https://gitlab.example.com/group/project"
+  },
+  "object_attributes": {
+    "id": 31,
+    "iid": 3,
+    "name": "Pipeline for branch: main",
+    "ref": "main",
+    "sha": "bcbb5ec396a2c0f828686f14fac9b80b780504f2",
+    "source": "push",
+    "status": "failed",
+    "created_at": "2026-09-04T10:05:00Z",
+    "finished_at": "2026-09-04T10:06:03Z",
+    "duration": 63,
+    "url": "https://gitlab.example.com/group/project/-/pipelines/31"
+  },
+  "commit": {
+    "id": "bcbb5ec396a2c0f828686f14fac9b80b780504f2",
+    "message": "fix: handle failed request",
+    "author": {
+      "name": "Example User",
+      "email": "user@example.com"
+    }
+  },
+  "builds": [
+    {
+      "id": 380,
+      "name": "test",
+      "status": "failed",
+      "allow_failure": false
+    }
+  ]
+}

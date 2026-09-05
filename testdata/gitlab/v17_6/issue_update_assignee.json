@@ -1,0 +1,50 @@
+{
+  "object_kind": "issue",
+  "event_type": "issue",
+  "user": {
+    "id": 8,
+    "name": "Maintainer",
+    "username": "maintainer",
+    "email": "maintainer@example.com"
+  },
+  "project": {
+    "id": 76,
+    "path_with_namespace": "group/project",
+    "web_url": "https://gitlab.example.com/group/project"
+  },
+  "object_attributes": {
+    "id": 400,
+    "iid": 4,
+    "action": "update",
+    "title": "Build issue",
+    "state": "opened",
+    "url": "https://gitlab.example.com/group/project/-/issues/4"
+  },
+  "changes": {
+    "assignees": {
+      "previous": [],
+      "current": [
+        {
+          "id": 99,
+          "name": "Reviewer",
+          "username": "reviewer"
+        }
+      ]
+    }
+  },
+  "issue": {
+    "id": 400,
+    "iid": 4,
+    "title": "Build issue",
+    "state": "opened",
+    "author_id": 7,
+    "url": "https://gitlab.example.com/group/project/-/issues/4",
+    "assignees": [
+      {
+        "id": 99,
+        "name": "Reviewer",
+        "username": "reviewer"
+      }
+    ]
+  }
+}

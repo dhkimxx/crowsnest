@@ -1,0 +1,45 @@
+services:
+  crowsnest:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      CROWSNEST_HTTP_ADDR: ":8080"
+      CROWSNEST_DB_PATH: "/data/crowsnest.sqlite3"
+      CROWSNEST_DRY_RUN: "${CROWSNEST_DRY_RUN:-true}"
+      CROWSNEST_RECONCILE_DRY_RUN: "${CROWSNEST_RECONCILE_DRY_RUN:-true}"
+      CROWSNEST_DELIVERY_POLL_INTERVAL: "${CROWSNEST_DELIVERY_POLL_INTERVAL:-2s}"
+      CROWSNEST_RECONCILE_INTERVAL: "${CROWSNEST_RECONCILE_INTERVAL:-15m}"
+      CROWSNEST_IDENTITY_SYNC_ENABLED: "${CROWSNEST_IDENTITY_SYNC_ENABLED:-false}"
+      CROWSNEST_IDENTITY_SYNC_DRY_RUN: "${CROWSNEST_IDENTITY_SYNC_DRY_RUN:-true}"
+      CROWSNEST_IDENTITY_SYNC_INTERVAL: "${CROWSNEST_IDENTITY_SYNC_INTERVAL:-1h}"
+      CROWSNEST_WEBHOOK_SECRET: "${CROWSNEST_WEBHOOK_SECRET:-}"
+      CROWSNEST_GITLAB_BASE_URL: "${CROWSNEST_GITLAB_BASE_URL:-}"
+      CROWSNEST_GITLAB_API_TOKEN: "${CROWSNEST_GITLAB_API_TOKEN:-}"
+      CROWSNEST_GITLAB_WEBHOOK_URL: "${CROWSNEST_GITLAB_WEBHOOK_URL:-}"
+      CROWSNEST_GITLAB_WEBHOOK_TOKEN: "${CROWSNEST_GITLAB_WEBHOOK_TOKEN:-}"
+      CROWSNEST_GITLAB_HOOK_TOKEN: "${CROWSNEST_GITLAB_HOOK_TOKEN:-}"
+      CROWSNEST_GITLAB_HOOK_NAME: "${CROWSNEST_GITLAB_HOOK_NAME:-Crowsnest}"
+      CROWSNEST_GITLAB_SSL_VERIFY: "${CROWSNEST_GITLAB_SSL_VERIFY:-true}"
+      CROWSNEST_ALLOWED_EMAIL_DOMAINS: "${CROWSNEST_ALLOWED_EMAIL_DOMAINS:-example.com}"
+      CROWSNEST_FEISHU_BASE_URL: "${CROWSNEST_FEISHU_BASE_URL:-https://open.feishu.cn}"
+      CROWSNEST_FEISHU_APP_ID: "${CROWSNEST_FEISHU_APP_ID:-}"
+      CROWSNEST_FEISHU_APP_SECRET: "${CROWSNEST_FEISHU_APP_SECRET:-}"
+    ports:
+      - "5680:8080"
+    volumes:
+      - crowsnest-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  crowsnest-data:

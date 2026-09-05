@@ -1,0 +1,36 @@
+{
+  "object_kind": "merge_request",
+  "event_type": "merge_request",
+  "user": {
+    "id": 7,
+    "name": "Example User",
+    "username": "author",
+    "email": "author@example.com"
+  },
+  "project": {
+    "id": 76,
+    "name": "Project",
+    "path_with_namespace": "group/project",
+    "web_url": "https://gitlab.example.com/group/project"
+  },
+  "object_attributes": {
+    "id": 9001,
+    "iid": 12,
+    "action": "open",
+    "state": "opened",
+    "title": "Improve API",
+    "description": "Please review this change.",
+    "source_branch": "feature/api",
+    "target_branch": "main",
+    "author_id": 7,
+    "url": "https://gitlab.example.com/group/project/-/merge_requests/12"
+  },
+  "reviewers": [
+    {
+      "id": 99,
+      "name": "Reviewer",
+      "username": "reviewer"
+    }
+  ],
+  "assignees": []
+}
