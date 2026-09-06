@@ -63,7 +63,8 @@ func serve(logger *slog.Logger) error {
 
 	decoder := gitlabv176.NewDecoder()
 	registry := application.NewDecoderRegistry(decoder)
-	router := application.NewRouter(store, store, store, settings.AllowedEmailDomains)
+	recipientPolicy := application.NewRecipientPolicy(settings.RecipientAllowlist)
+	router := application.NewRouterWithRecipientPolicy(store, store, store, settings.AllowedEmailDomains, recipientPolicy)
 	ingest := application.NewIngestService(registry, router, store, store, logger)
 	messenger, err := buildMessenger(settings, logger)
 	if err != nil {
@@ -75,9 +76,10 @@ func serve(logger *slog.Logger) error {
 	var workers sync.WaitGroup
 
 	deliveryWorker := application.NewDeliveryWorker(store, messenger, application.DeliveryWorkerConfig{
-		WorkerID:     "crowsnest-delivery",
-		BatchSize:    10,
-		PollInterval: settings.DeliveryPollInterval,
+		WorkerID:        "crowsnest-delivery",
+		BatchSize:       10,
+		PollInterval:    settings.DeliveryPollInterval,
+		RecipientPolicy: recipientPolicy,
 	}, logger)
 	workers.Add(1)
 	go func() {

@@ -97,6 +97,7 @@ GitLab의 `object_attributes`나 Feishu의 `receive_id`는 Domain 모델에 노�
 - Webhook 수신
 - 이벤트 정규화
 - 수신자 계산
+- 수신자 allowlist 정책 적용
 - preference 적용
 - delivery 생성
 - Outbox 전송

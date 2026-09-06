@@ -18,6 +18,7 @@ type Settings struct {
 	IdentitySyncEnabled   bool
 	IdentitySyncDryRun    bool
 	IdentitySyncInterval  time.Duration
+	RecipientAllowlist    []string
 	AllowedEmailDomains   []string
 	GitLabBaseURL         string
 	GitLabAPIToken        string
@@ -52,6 +53,7 @@ func Load() Settings {
 		IdentitySyncEnabled:   boolEnv("CROWSNEST_IDENTITY_SYNC_ENABLED", false),
 		IdentitySyncDryRun:    boolEnv("CROWSNEST_IDENTITY_SYNC_DRY_RUN", true),
 		IdentitySyncInterval:  durationEnv("CROWSNEST_IDENTITY_SYNC_INTERVAL", time.Hour),
+		RecipientAllowlist:    csvEnv("CROWSNEST_RECIPIENT_ALLOWLIST"),
 		AllowedEmailDomains:   csvEnv("CROWSNEST_ALLOWED_EMAIL_DOMAINS"),
 		GitLabBaseURL:         strings.TrimRight(os.Getenv("CROWSNEST_GITLAB_BASE_URL"), "/"),
 		GitLabAPIToken:        os.Getenv("CROWSNEST_GITLAB_API_TOKEN"),

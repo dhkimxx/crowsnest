@@ -40,6 +40,7 @@ docker compose --env-file .env -f deploy/compose.yaml up --build
 | `CROWSNEST_IDENTITY_SYNC_ENABLED` | GitLab 사용자와 Feishu 사용자 매핑 동기화 Worker 활성화 |
 | `CROWSNEST_IDENTITY_SYNC_DRY_RUN` | `true`이면 사용자 매핑 DB를 변경하지 않음 |
 | `CROWSNEST_IDENTITY_SYNC_INTERVAL` | 사용자 매핑 동기화 주기. 기본 `1h` |
+| `CROWSNEST_RECIPIENT_ALLOWLIST` | 비어 있으면 전체 발송, 값이 있으면 쉼표로 구분한 이메일에만 발송 |
 | `CROWSNEST_WEBHOOK_SECRET` | 수신 Webhook의 `X-Gitlab-Token` 검증값 |
 | `CROWSNEST_GITLAB_BASE_URL` | GitLab 기본 URL |
 | `CROWSNEST_GITLAB_API_TOKEN` | 전체 프로젝트 Hook을 관리하는 API Token |
@@ -84,6 +85,18 @@ CROWSNEST_IDENTITY_SYNC_INTERVAL=1h
 ```
 
 `serve`는 시작 직후 한 번 동기화하고 이후 설정된 주기로 반복한다. GitLab 사용자 API와 Feishu Contact API의 Secret·응답 원문은 로그에 남기지 않는다.
+
+## 발송 대상 제한
+
+`CROWSNEST_RECIPIENT_ALLOWLIST`가 비어 있으면 기존처럼 모든 결정된 수신자에게 발송한다. 하나 이상의 이메일이 설정되면 라우팅 단계와 Outbox Worker 양쪽에서 해당 이메일과 일치하는 수신자만 허용한다. 따라서 설정을 켠 뒤 이미 대기 중인 다른 수신자의 delivery도 발송되지 않는다.
+
+예를 들어 단일 사용자에게만 시험 발송하려면 다음처럼 설정한다.
+
+```text
+CROWSNEST_RECIPIENT_ALLOWLIST=carol@example.com
+```
+
+목록은 이메일을 소문자로 정규화하고 쉼표로 구분한다. 운영 범위를 전체로 되돌리려면 값을 비우고 서비스를 재시작한다.
 
 ## 알림 설정
 

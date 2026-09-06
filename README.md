@@ -37,6 +37,8 @@ go run ./cmd/crowsnest sync-users --dry-run
 
 `sync-users --apply` 또는 `CROWSNEST_IDENTITY_SYNC_ENABLED=true` 설정을 사용하면 GitLab 사용자와 Feishu 계정을 이메일 기준으로 자동 검증·동기화할 수 있다. Feishu Contact API 권한이 필요하다.
 
+`CROWSNEST_RECIPIENT_ALLOWLIST`를 설정하면 해당 이메일에만 발송하고, 비워 두면 전체 수신자에게 발송한다.
+
 자세한 구현 범위는 [docs/PLAN.md](docs/PLAN.md), 구조와 경계는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를 참고한다.
 
 ## 보안 원칙

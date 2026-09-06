@@ -39,6 +39,36 @@ func TestRouterRoutesPipelineFailureToCommitAuthor(t *testing.T) {
 	}
 }
 
+func TestRouterOnlyCreatesAllowlistedDeliveries(t *testing.T) {
+	router := NewRouterWithRecipientPolicy(nil, nil, nil, []string{"example.com"}, NewRecipientPolicy([]string{"carol@example.com"}))
+	event := domain.CanonicalEvent{
+		EventKey: "allowlist-1",
+		Source:   domain.ProviderGitLab,
+		Kind:     domain.EventKindNote,
+		Action:   "create",
+		Project:  domain.ProjectRef{ID: "76", Path: "group/project"},
+		Actor:    domain.Identity{Provider: domain.ProviderGitLab, ProviderID: "7", Email: "bob@example.com"},
+		Object:   domain.ResourceRef{Kind: domain.EventKindMergeRequest, IID: "12"},
+		Note: &domain.NoteDetails{
+			ID: "102",
+			MergeRequest: &domain.MergeRequestDetails{
+				IID:    "12",
+				Author: domain.Identity{Provider: domain.ProviderGitLab, ProviderID: "42", Email: "alice@example.com"},
+			},
+		},
+		Mentions: []domain.Identity{
+			{Provider: domain.ProviderGitLab, ProviderID: "99", Email: "carol@example.com"},
+		},
+	}
+	result, err := router.Route(context.Background(), event)
+	if err != nil {
+		t.Fatalf("Route() error = %v", err)
+	}
+	if len(result.Deliveries) != 1 || result.Deliveries[0].Notification.Recipient.Value != "carol@example.com" {
+		t.Fatalf("deliveries = %#v", result.Deliveries)
+	}
+}
+
 func TestRouterFallsBackToPipelineActorWhenCommitAuthorCannotResolve(t *testing.T) {
 	router := NewRouter(nil, nil, &fakePipelineStateStore{}, []string{"example.com"})
 	event := domain.CanonicalEvent{

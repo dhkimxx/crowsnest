@@ -33,6 +33,28 @@ func TestDeliveryWorkerClassifiesMessengerFailure(t *testing.T) {
 	}
 }
 
+func TestDeliveryWorkerBlocksNonAllowlistedPendingDelivery(t *testing.T) {
+	outbox := &fakeOutbox{deliveries: []domain.Delivery{{
+		Key: "delivery-blocked",
+		Notification: domain.Notification{
+			EventKey:  "event-blocked",
+			Recipient: domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "other@example.com"},
+		},
+	}}}
+	messenger := &fakeMessenger{}
+	worker := NewDeliveryWorker(outbox, messenger, DeliveryWorkerConfig{
+		BatchSize:       1,
+		RecipientPolicy: NewRecipientPolicy([]string{"carol@example.com"}),
+	}, nil)
+
+	if err := worker.process(context.Background()); err != nil {
+		t.Fatalf("process() error = %v", err)
+	}
+	if len(messenger.notifications) != 0 || outbox.failed == nil || outbox.failed.Class != "policy_blocked" || outbox.failed.Retryable {
+		t.Fatalf("messenger=%#v failure=%#v", messenger, outbox.failed)
+	}
+}
+
 type fakeOutbox struct {
 	deliveries []domain.Delivery
 	delivered  string

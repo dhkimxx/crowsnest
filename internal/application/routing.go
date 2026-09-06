@@ -38,10 +38,15 @@ type Router struct {
 	preferences         ports.PreferenceStore
 	pipelineStates      ports.PipelineStateStore
 	allowedEmailDomains map[string]struct{}
+	recipientPolicy     *RecipientPolicy
 	clock               func() time.Time
 }
 
 func NewRouter(identities ports.IdentityStore, preferences ports.PreferenceStore, pipelineStates ports.PipelineStateStore, allowedEmailDomains []string) *Router {
+	return NewRouterWithRecipientPolicy(identities, preferences, pipelineStates, allowedEmailDomains, nil)
+}
+
+func NewRouterWithRecipientPolicy(identities ports.IdentityStore, preferences ports.PreferenceStore, pipelineStates ports.PipelineStateStore, allowedEmailDomains []string, recipientPolicy *RecipientPolicy) *Router {
 	domains := make(map[string]struct{}, len(allowedEmailDomains))
 	for _, domainName := range allowedEmailDomains {
 		domainName = strings.ToLower(strings.TrimSpace(domainName))
@@ -54,6 +59,7 @@ func NewRouter(identities ports.IdentityStore, preferences ports.PreferenceStore
 		preferences:         preferences,
 		pipelineStates:      pipelineStates,
 		allowedEmailDomains: domains,
+		recipientPolicy:     recipientPolicy,
 		clock:               time.Now,
 	}
 }
@@ -86,6 +92,9 @@ func (r *Router) Route(ctx context.Context, event domain.CanonicalEvent) (RouteR
 	result := RouteResult{UnresolvedUsers: unresolved}
 	for _, item := range resolved {
 		if len(item.reasons) == 0 || item.address.Value == "" {
+			continue
+		}
+		if !r.recipientPolicy.Allows(item.address) {
 			continue
 		}
 		reasonCodes := make([]string, 0, len(item.reasons))

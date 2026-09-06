@@ -14,9 +14,10 @@ import (
 )
 
 type DeliveryWorkerConfig struct {
-	WorkerID     string
-	BatchSize    int
-	PollInterval time.Duration
+	WorkerID        string
+	BatchSize       int
+	PollInterval    time.Duration
+	RecipientPolicy *RecipientPolicy
 }
 
 type DeliveryWorker struct {
@@ -38,6 +39,9 @@ func NewDeliveryWorker(outbox ports.OutboxStore, messenger ports.Messenger, conf
 	}
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if config.RecipientPolicy == nil {
+		config.RecipientPolicy = NewRecipientPolicy(nil)
 	}
 	return &DeliveryWorker{outbox: outbox, messenger: messenger, config: config, logger: logger}
 }
@@ -69,6 +73,14 @@ func (w *DeliveryWorker) process(ctx context.Context) error {
 		return err
 	}
 	for _, delivery := range deliveries {
+		if !w.config.RecipientPolicy.Allows(delivery.Notification.Recipient) {
+			failure := domain.DeliveryFailure{Class: "policy_blocked", Retryable: false, Message: "recipient is outside the configured allowlist"}
+			if err := w.outbox.MarkFailed(ctx, delivery.Key, failure); err != nil {
+				return fmt.Errorf("mark blocked delivery %s failed: %w", delivery.Key, err)
+			}
+			w.logger.Info("delivery blocked by recipient allowlist", "delivery_key", delivery.Key, "event_key", delivery.Notification.EventKey)
+			continue
+		}
 		receipt, sendErr := w.messenger.Send(ctx, delivery.Notification)
 		if sendErr == nil {
 			if err := w.outbox.MarkDelivered(ctx, delivery.Key, receipt); err != nil {
