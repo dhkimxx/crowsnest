@@ -22,7 +22,7 @@ func TestLoadSeparatesWebhookAndReconcileSettings(t *testing.T) {
 	t.Setenv("CROWSNEST_IDENTITY_SYNC_ENABLED", "true")
 	t.Setenv("CROWSNEST_IDENTITY_SYNC_DRY_RUN", "false")
 	t.Setenv("CROWSNEST_IDENTITY_SYNC_INTERVAL", "30m")
-	t.Setenv("CROWSNEST_RECIPIENT_ALLOWLIST", "Carol.Kim@example.com, other@example.com")
+	t.Setenv("CROWSNEST_RECIPIENT_ALLOWLIST", "Carol@example.com, other@example.com")
 	settings := Load()
 	if settings.WebhookSecret != "incoming-token" || settings.GitLabHookToken != "webhook-token" || settings.GitLabBaseURL != "https://gitlab.example.com" || settings.ReconcileDryRun || !settings.IdentitySyncEnabled || settings.IdentitySyncDryRun || settings.IdentitySyncInterval != 30*time.Minute || len(settings.RecipientAllowlist) != 2 || settings.RecipientAllowlist[0] != "carol@example.com" {
 		t.Fatalf("settings = %#v", settings)

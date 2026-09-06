@@ -21,7 +21,7 @@ func TestIdentitySyncEnablesOnlyActiveFeishuUsers(t *testing.T) {
 			{Identity: domain.Identity{ProviderID: "1", Username: "alice", Name: "Alice", Email: "Alice@example.com"}, Active: true},
 			{Identity: domain.Identity{ProviderID: "2", Username: "bob", Name: "Bob", Email: "bob@example.com"}, Active: true},
 			{Identity: domain.Identity{ProviderID: "3", Username: "carol", Name: "Carol", Email: "carol@example.com"}, Active: false},
-			{Identity: domain.Identity{ProviderID: "4", Username: "vendor", Name: "Vendor", Email: "vendor@example.com"}, Active: true},
+			{Identity: domain.Identity{ProviderID: "4", Username: "vendor", Name: "Vendor", Email: "vendor@external.test"}, Active: true},
 		}},
 		fakeEmailDirectory{users: map[string]ports.DirectoryUser{
 			"alice@example.com": {Email: "alice@example.com", ID: "ou_alice"},

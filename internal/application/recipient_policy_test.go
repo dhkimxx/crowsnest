@@ -14,7 +14,7 @@ func TestRecipientPolicyAllowsAllWhenAllowlistIsEmpty(t *testing.T) {
 }
 
 func TestRecipientPolicyMatchesEmailCaseInsensitively(t *testing.T) {
-	policy := NewRecipientPolicy([]string{" Carol.Kim@example.com "})
+	policy := NewRecipientPolicy([]string{" Carol@example.com "})
 	if !policy.Allows(domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "carol@example.com"}) {
 		t.Fatal("allowlisted recipient was blocked")
 	}
