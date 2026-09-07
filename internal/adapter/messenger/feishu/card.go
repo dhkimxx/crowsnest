@@ -32,20 +32,18 @@ func RenderCard(notification domain.Notification) ([]byte, error) {
 		},
 	}
 	if notification.SourceText != "" {
+		elements = append(elements, map[string]any{"tag": "hr"})
 		elements = append(elements, map[string]any{
 			"tag": "div",
 			"text": map[string]any{
 				"tag":     "plain_text",
-				"content": truncate(notification.SourceText, 1000),
+				"content": "Content: " + truncate(notification.SourceText, 1000),
 			},
 		})
 	}
 	if len(notification.Facts) > 0 {
-		keys := make([]string, 0, len(notification.Facts))
-		for key := range notification.Facts {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
+		elements = append(elements, map[string]any{"tag": "hr"})
+		keys := orderedFactKeys(notification.Facts)
 		for _, key := range keys {
 			elements = append(elements, map[string]any{
 				"tag": "div",
@@ -61,11 +59,12 @@ func RenderCard(notification domain.Notification) ([]byte, error) {
 			"tag": "div",
 			"text": map[string]any{
 				"tag":     "plain_text",
-				"content": "실패 Job: " + strings.Join(notification.FailedJobs, ", "),
+				"content": "Failed Jobs: " + joinLimited(notification.FailedJobs, 8),
 			},
 		})
 	}
 	if len(notification.Reasons) > 0 {
+		elements = append(elements, map[string]any{"tag": "hr"})
 		reasons := make([]string, 0, len(notification.Reasons))
 		for _, reason := range notification.Reasons {
 			reasons = append(reasons, reason.Text)
@@ -74,18 +73,19 @@ func RenderCard(notification domain.Notification) ([]byte, error) {
 			"tag": "div",
 			"text": map[string]any{
 				"tag":     "plain_text",
-				"content": "수신 이유: " + strings.Join(reasons, ", "),
+				"content": "Reason: " + strings.Join(reasons, " · "),
 			},
 		})
 	}
 	if validURL(notification.URL) {
+		elements = append(elements, map[string]any{"tag": "hr"})
 		elements = append(elements, map[string]any{
 			"tag": "action",
 			"actions": []any{
 				map[string]any{
 					"tag":  "button",
 					"type": "primary",
-					"text": map[string]any{"tag": "plain_text", "content": "GitLab에서 확인"},
+					"text": map[string]any{"tag": "plain_text", "content": openButtonLabel(notification)},
 					"url":  notification.URL,
 				},
 			},
@@ -100,6 +100,47 @@ func RenderCard(notification domain.Notification) ([]byte, error) {
 		"elements": elements,
 	}
 	return json.Marshal(card)
+}
+
+var factOrder = []string{"Project", "Title", "Branch", "Source", "State", "Status", "Triggered by", "Changed by", "Commented by"}
+
+func orderedFactKeys(facts map[string]string) []string {
+	keys := make([]string, 0, len(facts))
+	seen := make(map[string]struct{}, len(facts))
+	for _, key := range factOrder {
+		if _, ok := facts[key]; ok {
+			keys = append(keys, key)
+			seen[key] = struct{}{}
+		}
+	}
+	remaining := make([]string, 0, len(facts)-len(keys))
+	for key := range facts {
+		if _, ok := seen[key]; !ok {
+			remaining = append(remaining, key)
+		}
+	}
+	sort.Strings(remaining)
+	return append(keys, remaining...)
+}
+
+func joinLimited(values []string, limit int) string {
+	if len(values) <= limit {
+		return strings.Join(values, ", ")
+	}
+	return strings.Join(values[:limit], ", ") + fmt.Sprintf(" +%d more", len(values)-limit)
+}
+
+func openButtonLabel(notification domain.Notification) string {
+	switch notification.Kind {
+	case domain.EventKindPipeline:
+		return "Open Pipeline"
+	case domain.EventKindMergeRequest:
+		return "Open Merge Request"
+	case domain.EventKindIssue:
+		return "Open Issue"
+	default:
+		return "Open in GitLab"
+	}
 }
 
 func validURL(value string) bool {

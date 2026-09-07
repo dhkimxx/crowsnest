@@ -146,7 +146,7 @@ func (r *Router) routePipeline(ctx context.Context, candidates *candidateSet, ev
 		if !resolvableIdentity(identity) {
 			identity = event.Actor
 		}
-		candidates.add(identity, ReasonCIFailed, "내가 작성한 커밋의 Pipeline이 실패했습니다.", true)
+		candidates.add(identity, ReasonCIFailed, "작성한 Commit의 Pipeline이 실패했습니다.", true)
 	case "success":
 		if r.pipelineStates == nil {
 			return nil
@@ -159,7 +159,7 @@ func (r *Router) routePipeline(ctx context.Context, candidates *candidateSet, ev
 			return nil
 		}
 		for _, recipient := range state.Recipients {
-			candidates.addAddress(recipient, ReasonCIRecovered, "이전에 실패했던 Pipeline이 복구되었습니다.", true)
+			candidates.addAddress(recipient, ReasonCIRecovered, "실패했던 Pipeline이 복구되었습니다.", true)
 		}
 	}
 	return nil
@@ -173,44 +173,44 @@ func (r *Router) routeMergeRequest(candidates *candidateSet, event domain.Canoni
 	switch event.Action {
 	case "open":
 		for _, reviewer := range mergeRequest.Reviewers {
-			candidates.add(reviewer, ReasonMRReviewRequested, "새 Reviewer로 지정되었습니다.", false)
+			candidates.add(reviewer, ReasonMRReviewRequested, "Reviewer로 지정되었습니다.", false)
 		}
 		for _, assignee := range mergeRequest.Assignees {
-			candidates.add(assignee, ReasonMRAssigned, "Merge Request 담당자로 지정되었습니다.", false)
+			candidates.add(assignee, ReasonMRAssigned, "Merge Request의 Assignee로 지정되었습니다.", false)
 		}
 	case "update":
 		for _, change := range event.Changes {
 			switch change.Field {
 			case "reviewers":
 				for _, reviewer := range change.Added {
-					candidates.add(reviewer, ReasonMRReviewRequested, "새 Reviewer로 지정되었습니다.", false)
+					candidates.add(reviewer, ReasonMRReviewRequested, "Reviewer로 지정되었습니다.", false)
 				}
 			case "assignees":
 				for _, assignee := range change.Added {
-					candidates.add(assignee, ReasonMRAssigned, "Merge Request 담당자로 지정되었습니다.", false)
+					candidates.add(assignee, ReasonMRAssigned, "Merge Request의 Assignee로 지정되었습니다.", false)
 				}
 			case "title", "description", "source_branch", "target_branch", "draft":
 				if hasIdentity(mergeRequest.Author) {
-					candidates.add(mergeRequest.Author, ReasonMRUpdated, "내 Merge Request에 의미 있는 변경이 있습니다.", false)
+					candidates.add(mergeRequest.Author, ReasonMRUpdated, "Merge Request가 변경되었습니다.", false)
 				}
 				if change.Field == "draft" || change.Field == "target_branch" {
 					for _, reviewer := range mergeRequest.Reviewers {
-						candidates.add(reviewer, ReasonMRStateChanged, "검토 중인 Merge Request 상태가 변경되었습니다.", false)
+						candidates.add(reviewer, ReasonMRStateChanged, "검토 중인 Merge Request의 상태가 변경되었습니다.", false)
 					}
 				}
 			}
 		}
 	case "approved", "approval", "unapproved", "unapproval":
 		if hasIdentity(mergeRequest.Author) {
-			candidates.add(mergeRequest.Author, ReasonMRApproved, "내 Merge Request의 승인 상태가 변경되었습니다.", false)
+			candidates.add(mergeRequest.Author, ReasonMRApproved, "Merge Request의 Approval 상태가 변경되었습니다.", false)
 		}
 	case "merge", "close", "reopen":
 		if hasIdentity(mergeRequest.Author) {
-			candidates.add(mergeRequest.Author, ReasonMRStateChanged, "내 Merge Request의 상태가 변경되었습니다.", false)
+			candidates.add(mergeRequest.Author, ReasonMRStateChanged, mergeRequestStateReason(event.Action), false)
 		}
 	}
 	for _, mention := range event.Mentions {
-		candidates.add(mention, ReasonMention, "Merge Request에서 멘션되었습니다.", false)
+		candidates.add(mention, ReasonMention, "Merge Request에서 Mention되었습니다.", false)
 	}
 }
 
@@ -223,16 +223,16 @@ func (r *Router) routeNote(candidates *candidateSet, event domain.CanonicalEvent
 	}
 	if event.Note.MergeRequest != nil {
 		if hasIdentity(event.Note.MergeRequest.Author) && !sameIdentity(event.Actor, event.Note.MergeRequest.Author) {
-			candidates.add(event.Note.MergeRequest.Author, ReasonMRComment, "내 Merge Request에 다른 사용자가 댓글을 남겼습니다.", false)
+			candidates.add(event.Note.MergeRequest.Author, ReasonMRComment, "Merge Request에 새 Comment가 등록되었습니다.", false)
 		}
 	}
 	if event.Note.Issue != nil {
 		if hasIdentity(event.Note.Issue.Author) && !sameIdentity(event.Actor, event.Note.Issue.Author) {
-			candidates.add(event.Note.Issue.Author, ReasonIssueUpdated, "내 Issue에 다른 사용자가 댓글을 남겼습니다.", false)
+			candidates.add(event.Note.Issue.Author, ReasonIssueUpdated, "Issue에 새 Comment가 등록되었습니다.", false)
 		}
 	}
 	for _, mention := range event.Mentions {
-		candidates.add(mention, ReasonMention, "댓글에서 멘션되었습니다.", false)
+		candidates.add(mention, ReasonMention, "Comment에서 Mention되었습니다.", false)
 	}
 }
 
@@ -243,7 +243,7 @@ func (r *Router) routeIssue(candidates *candidateSet, event domain.CanonicalEven
 	switch event.Action {
 	case "open":
 		for _, assignee := range event.Issue.Assignees {
-			candidates.add(assignee, ReasonIssueAssigned, "새 Issue 담당자로 지정되었습니다.", false)
+			candidates.add(assignee, ReasonIssueAssigned, "Issue의 Assignee로 지정되었습니다.", false)
 		}
 	case "update":
 		for _, change := range event.Changes {
@@ -253,13 +253,13 @@ func (r *Router) routeIssue(candidates *candidateSet, event domain.CanonicalEven
 				}
 			} else if change.Field == "title" || change.Field == "description" || change.Field == "state" {
 				if hasIdentity(event.Issue.Author) {
-					candidates.add(event.Issue.Author, ReasonIssueUpdated, "내 Issue에 의미 있는 변경이 있습니다.", false)
+					candidates.add(event.Issue.Author, ReasonIssueUpdated, "Issue가 변경되었습니다.", false)
 				}
 			}
 		}
 	}
 	for _, mention := range event.Mentions {
-		candidates.add(mention, ReasonMention, "Issue에서 멘션되었습니다.", false)
+		candidates.add(mention, ReasonMention, "Issue에서 Mention되었습니다.", false)
 	}
 }
 
@@ -498,12 +498,18 @@ func deliveryKey(event domain.CanonicalEvent, address domain.RecipientAddress, r
 
 func notificationTitle(event domain.CanonicalEvent, reasons []domain.NotificationReason) string {
 	if len(reasons) == 1 {
-		return reasons[0].Text
+		return notificationReasonTitle(event, reasons[0].Code)
 	}
 	if event.Kind == domain.EventKindPipeline {
-		return "GitLab Pipeline 관련 알림"
+		return "Pipeline update"
 	}
-	return "GitLab 작업 관련 알림"
+	if event.Kind == domain.EventKindMergeRequest {
+		return "Merge Request update"
+	}
+	if event.Kind == domain.EventKindIssue {
+		return "Issue update"
+	}
+	return "GitLab notification"
 }
 
 func notificationSummary(event domain.CanonicalEvent) string {
@@ -511,19 +517,13 @@ func notificationSummary(event domain.CanonicalEvent) string {
 	if project == "" {
 		project = event.Project.ID
 	}
-	object := event.Object.Title
-	if object == "" {
-		object = event.Object.IID
-	}
-	if object == "" {
-		object = event.Object.ID
-	}
+	object := resourceLabel(event)
 	parts := []string{project}
 	if object != "" {
 		parts = append(parts, object)
 	}
-	if event.Action != "" {
-		parts = append(parts, event.Action)
+	if action := eventActionLabel(event); action != "" {
+		parts = append(parts, action)
 	}
 	return strings.Join(parts, " · ")
 }
@@ -531,31 +531,148 @@ func notificationSummary(event domain.CanonicalEvent) string {
 func notificationFacts(event domain.CanonicalEvent) map[string]string {
 	facts := make(map[string]string)
 	if event.Project.Path != "" {
-		facts["프로젝트"] = event.Project.Path
+		facts["Project"] = event.Project.Path
+	}
+	if event.Object.Title != "" {
+		facts["Title"] = event.Object.Title
 	}
 	if event.Actor.Name != "" {
-		facts["발생자"] = event.Actor.Name
+		facts[actorFactLabel(event)] = event.Actor.Name
 	} else if event.Actor.Username != "" {
-		facts["발생자"] = "@" + event.Actor.Username
+		facts[actorFactLabel(event)] = "@" + event.Actor.Username
 	}
-	if event.Action != "" {
-		facts["상태"] = event.Action
+	if action := eventActionLabel(event); action != "" {
+		facts["Status"] = action
 	}
 	if event.Pipeline != nil {
 		if event.Pipeline.Ref != "" {
-			facts["브랜치"] = event.Pipeline.Ref
+			facts["Branch"] = event.Pipeline.Ref
 		}
 		if event.Pipeline.Source != "" {
-			facts["Pipeline source"] = event.Pipeline.Source
+			facts["Source"] = strings.ToUpper(event.Pipeline.Source[:1]) + event.Pipeline.Source[1:]
 		}
 	}
 	if event.MergeRequest != nil && (event.MergeRequest.SourceBranch != "" || event.MergeRequest.TargetBranch != "") {
-		facts["브랜치"] = event.MergeRequest.SourceBranch + " → " + event.MergeRequest.TargetBranch
+		facts["Branch"] = event.MergeRequest.SourceBranch + " → " + event.MergeRequest.TargetBranch
 	}
 	if event.Issue != nil && event.Issue.State != "" {
-		facts["상태"] = event.Issue.State
+		facts["State"] = event.Issue.State
 	}
 	return facts
+}
+
+func notificationReasonTitle(event domain.CanonicalEvent, reasonCode string) string {
+	switch reasonCode {
+	case ReasonCIFailed:
+		return "Pipeline failed"
+	case ReasonCIRecovered:
+		return "Pipeline recovered"
+	case ReasonMRReviewRequested:
+		return "Review requested"
+	case ReasonMRAssigned:
+		return "Assignee assigned"
+	case ReasonMRUpdated:
+		return "Merge Request updated"
+	case ReasonMRApproved:
+		return "Approval changed"
+	case ReasonMRStateChanged:
+		switch event.Action {
+		case "merge":
+			return "Merge Request merged"
+		case "close":
+			return "Merge Request closed"
+		case "reopen":
+			return "Merge Request reopened"
+		default:
+			return "Merge Request state changed"
+		}
+	case ReasonMRComment:
+		return "New Comment"
+	case ReasonMention:
+		return "Mentioned"
+	case ReasonIssueAssigned:
+		return "Issue assigned"
+	case ReasonIssueUpdated:
+		if event.Note != nil {
+			return "New Comment"
+		}
+		return "Issue updated"
+	default:
+		return "GitLab notification"
+	}
+}
+
+func mergeRequestStateReason(action string) string {
+	switch action {
+	case "merge":
+		return "Merge Request가 머지되었습니다."
+	case "close":
+		return "Merge Request가 닫혔습니다."
+	case "reopen":
+		return "Merge Request가 다시 열렸습니다."
+	default:
+		return "Merge Request의 상태가 변경되었습니다."
+	}
+}
+
+func eventActionLabel(event domain.CanonicalEvent) string {
+	if event.Kind == domain.EventKindPipeline && event.Pipeline != nil {
+		switch event.Pipeline.Status {
+		case "failed":
+			return "Failed"
+		case "success":
+			return "Recovered"
+		}
+	}
+	switch event.Action {
+	case "open":
+		return "Opened"
+	case "update":
+		return "Updated"
+	case "approved", "approval":
+		return "Approved"
+	case "unapproved", "unapproval":
+		return "Approval removed"
+	case "merge":
+		return "Merged"
+	case "close":
+		return "Closed"
+	case "reopen":
+		return "Reopened"
+	case "create":
+		return "Created"
+	default:
+		return event.Action
+	}
+}
+
+func resourceLabel(event domain.CanonicalEvent) string {
+	if event.Object.IID != "" {
+		switch event.Object.Kind {
+		case domain.EventKindMergeRequest:
+			return "!" + event.Object.IID
+		case domain.EventKindIssue:
+			return "#" + event.Object.IID
+		case domain.EventKindPipeline:
+			return "Pipeline #" + event.Object.IID
+		}
+		return event.Object.IID
+	}
+	if event.Object.Title != "" {
+		return event.Object.Title
+	}
+	return event.Object.ID
+}
+
+func actorFactLabel(event domain.CanonicalEvent) string {
+	switch event.Kind {
+	case domain.EventKindPipeline:
+		return "Triggered by"
+	case domain.EventKindNote:
+		return "Commented by"
+	default:
+		return "Changed by"
+	}
 }
 
 func failedJobNames(event domain.CanonicalEvent) []string {
