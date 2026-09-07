@@ -55,16 +55,6 @@ docker compose --env-file .env -f deploy/compose.yaml up --build
 
 수신 Secret과 자동 생성 Hook Token은 기본적으로 같은 값을 쓸 수 있지만, 운영에서는 분리할 수 있다.
 
-## 사용자 매핑
-
-GitLab username 또는 user ID만 있는 Reviewer·Assignee·멘션을 Feishu 이메일로 보내려면 매핑을 입력한다.
-
-```bash
-go run ./cmd/crowsnest import-users --file templates/gitlab_user_map.csv
-```
-
-CSV에는 실제 회사 사용자 정보를 넣어야 하며, 해당 파일을 Git에 커밋하지 않는다.
-
 ## 사용자 자동 동기화
 
 GitLab Administrator API로 사용자를 읽고, 허용된 이메일 도메인의 사용자만 Feishu Open Platform의 `batch_get_id` API로 확인한다. Feishu에서 확인된 활성 사용자만 SQLite 매핑을 활성화한다. Feishu Contact API 권한 오류나 네트워크 오류가 발생하면 해당 실행에서는 기존 매핑을 변경하지 않는다.
@@ -100,11 +90,7 @@ CROWSNEST_RECIPIENT_ALLOWLIST=carol@example.com
 
 ## 알림 설정
 
-```bash
-go run ./cmd/crowsnest import-preferences --file templates/notification_preferences.csv
-```
-
-사용자 행이 없으면 기본값이 적용된다. `issue_updated` 기본값은 `false`다.
+현재는 SQLite의 기본 알림 정책을 사용한다. `issue_updated` 기본값은 `false`다. 사용자별 preference 관리는 향후 관리 API/UI로 추가한다.
 
 ## Hook Reconciler
 

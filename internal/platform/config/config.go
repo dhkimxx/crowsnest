@@ -53,8 +53,8 @@ func Load() Settings {
 		IdentitySyncEnabled:   boolEnv("CROWSNEST_IDENTITY_SYNC_ENABLED", false),
 		IdentitySyncDryRun:    boolEnv("CROWSNEST_IDENTITY_SYNC_DRY_RUN", true),
 		IdentitySyncInterval:  durationEnv("CROWSNEST_IDENTITY_SYNC_INTERVAL", time.Hour),
-		RecipientAllowlist:    csvEnv("CROWSNEST_RECIPIENT_ALLOWLIST"),
-		AllowedEmailDomains:   csvEnv("CROWSNEST_ALLOWED_EMAIL_DOMAINS"),
+		RecipientAllowlist:    listEnv("CROWSNEST_RECIPIENT_ALLOWLIST"),
+		AllowedEmailDomains:   listEnv("CROWSNEST_ALLOWED_EMAIL_DOMAINS"),
 		GitLabBaseURL:         strings.TrimRight(os.Getenv("CROWSNEST_GITLAB_BASE_URL"), "/"),
 		GitLabAPIToken:        os.Getenv("CROWSNEST_GITLAB_API_TOKEN"),
 		GitLabWebhookURL:      os.Getenv("CROWSNEST_GITLAB_WEBHOOK_URL"),
@@ -99,7 +99,7 @@ func durationEnv(name string, fallback time.Duration) time.Duration {
 	return parsed
 }
 
-func csvEnv(name string) []string {
+func listEnv(name string) []string {
 	var values []string
 	for _, value := range strings.Split(os.Getenv(name), ",") {
 		value = strings.ToLower(strings.TrimSpace(value))

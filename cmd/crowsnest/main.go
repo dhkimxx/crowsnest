@@ -34,14 +34,10 @@ func main() {
 		err = serve(logger)
 	case "reconcile":
 		err = reconcile(logger)
-	case "import-users":
-		err = importUsers(logger)
-	case "import-preferences":
-		err = importPreferences(logger)
 	case "sync-users":
 		err = syncUsers(logger)
 	default:
-		err = errors.New("usage: crowsnest [serve|reconcile|import-users|import-preferences|sync-users]")
+		err = errors.New("usage: crowsnest [serve|reconcile|sync-users]")
 	}
 	if err != nil {
 		logger.Error("crowsnest stopped", "error", err)
