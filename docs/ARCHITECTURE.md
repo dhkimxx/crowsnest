@@ -119,7 +119,6 @@ GitLab의 `object_attributes`나 Feishu의 `receive_id`는 Domain 모델에 노�
 - `IdentityStore`
 - `PreferenceStore`
 - `PipelineStateStore`
-- `HookStateStore`
 
 ### Adapters
 

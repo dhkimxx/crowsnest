@@ -149,11 +149,3 @@ type HookReconcileReport struct {
 	HooksUnchanged   int    `json:"hooks_unchanged"`
 	HooksFailed      int    `json:"hooks_failed"`
 }
-
-type HookState struct {
-	Scope      string            `json:"scope"`
-	ExternalID string            `json:"external_id"`
-	URL        string            `json:"url"`
-	Config     map[string]string `json:"config,omitempty"`
-	UpdatedAt  time.Time         `json:"updated_at"`
-}

@@ -47,7 +47,3 @@ type PipelineStateStore interface {
 	Get(context.Context, string) (*domain.PipelineState, error)
 	Put(context.Context, domain.PipelineState) error
 }
-
-type HookStateStore interface {
-	SaveHookState(context.Context, domain.HookState) error
-}

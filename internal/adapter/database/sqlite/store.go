@@ -191,14 +191,6 @@ func (s *Store) migrate(ctx context.Context) error {
 			recipients_json TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
-		`CREATE TABLE IF NOT EXISTS hook_states (
-			scope TEXT NOT NULL,
-			external_id TEXT NOT NULL,
-			url TEXT NOT NULL,
-			config_json TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (scope, external_id)
-		)`,
 		`CREATE TABLE IF NOT EXISTS unresolved_identities (
 			event_key TEXT NOT NULL,
 			provider TEXT NOT NULL,
@@ -760,28 +752,6 @@ func (s *Store) Put(ctx context.Context, state domain.PipelineState) error {
 		state.CorrelationKey, state.Status, recipientsJSON, state.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("write pipeline state: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) SaveHookState(ctx context.Context, state domain.HookState) error {
-	if state.Scope == "" || state.ExternalID == "" || state.URL == "" {
-		return errors.New("hook state scope, external ID, and URL are required")
-	}
-	configJSON, err := json.Marshal(state.Config)
-	if err != nil {
-		return fmt.Errorf("marshal hook state: %w", err)
-	}
-	if state.UpdatedAt.IsZero() {
-		state.UpdatedAt = time.Now().UTC()
-	}
-	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO hook_states(scope, external_id, url, config_json, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(scope, external_id) DO UPDATE SET url = excluded.url, config_json = excluded.config_json, updated_at = excluded.updated_at`,
-		state.Scope, state.ExternalID, state.URL, configJSON, state.UpdatedAt.UTC().Format(time.RFC3339Nano))
-	if err != nil {
-		return fmt.Errorf("save hook state: %w", err)
 	}
 	return nil
 }
