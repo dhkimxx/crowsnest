@@ -63,7 +63,7 @@ func RenderCard(notification domain.Notification) ([]byte, error) {
 			},
 		})
 	}
-	if len(notification.Reasons) > 0 {
+	if len(notification.Reasons) > 1 {
 		elements = append(elements, map[string]any{"tag": "hr"})
 		reasons := make([]string, 0, len(notification.Reasons))
 		for _, reason := range notification.Reasons {
@@ -73,7 +73,7 @@ func RenderCard(notification domain.Notification) ([]byte, error) {
 			"tag": "div",
 			"text": map[string]any{
 				"tag":     "plain_text",
-				"content": "Reason: " + strings.Join(reasons, " · "),
+				"content": "Related: " + strings.Join(reasons, " · "),
 			},
 		})
 	}

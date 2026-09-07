@@ -25,9 +25,12 @@ func TestRenderCardUsesReadableLabelsAndContextualButton(t *testing.T) {
 		t.Fatalf("RenderCard() error = %v", err)
 	}
 	content := string(card)
-	for _, expected := range []string{"Merge Request updated", "Content: Please review this change.", "Project: group/project", "Branch: feature/api → main", "Reason: Merge Request가 변경되었습니다.", "Open Merge Request"} {
+	for _, expected := range []string{"Merge Request updated", "Content: Please review this change.", "Project: group/project", "Branch: feature/api → main", "Open Merge Request"} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("card does not contain %q: %s", expected, content)
 		}
+	}
+	if strings.Contains(content, "Reason:") || strings.Contains(content, "Related:") {
+		t.Fatalf("single reason should be represented by the card title: %s", content)
 	}
 }

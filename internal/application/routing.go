@@ -249,7 +249,7 @@ func (r *Router) routeIssue(candidates *candidateSet, event domain.CanonicalEven
 		for _, change := range event.Changes {
 			if change.Field == "assignees" {
 				for _, assignee := range change.Added {
-					candidates.add(assignee, ReasonIssueAssigned, "Issue 담당자로 지정되었습니다.", false)
+					candidates.add(assignee, ReasonIssueAssigned, "Issue의 Assignee로 지정되었습니다.", false)
 				}
 			} else if change.Field == "title" || change.Field == "description" || change.Field == "state" {
 				if hasIdentity(event.Issue.Author) {
