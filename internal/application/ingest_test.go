@@ -52,6 +52,48 @@ func TestIngestServiceIgnoresUnsupportedSystemEvents(t *testing.T) {
 	}
 }
 
+func TestIngestServiceEnrichesIdentitiesBeforeRouting(t *testing.T) {
+	store := &fakeEventStore{}
+	service := NewIngestService(
+		NewDecoderRegistry(gitlabv176.NewDecoder()),
+		NewRouter(nil, nil, nil, []string{"example.com"}),
+		store,
+		nil,
+		nil,
+	)
+	service.SetIdentityResolver(fakeEventIdentityResolver{})
+	body := []byte(`{
+      "object_kind":"merge_request",
+      "event_type":"merge_request",
+      "user":{"id":7,"username":"author"},
+      "project":{"id":76,"path_with_namespace":"group/project"},
+      "object_attributes":{"id":9001,"iid":12,"action":"open","state":"opened","title":"Improve API"},
+      "reviewers":[{"id":12,"username":"alice"}],
+      "assignees":[]
+    }`)
+	result, err := service.Handle(context.Background(), http.Header{"X-Gitlab-Event": []string{"Merge Request Hook"}}, body)
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if result.DeliveryCount != 1 || len(store.deliveries) != 1 || store.deliveries[0].Notification.Recipient.Value != "alice@example.com" {
+		t.Fatalf("result=%#v deliveries=%#v", result, store.deliveries)
+	}
+}
+
+type fakeEventIdentityResolver struct{}
+
+func (fakeEventIdentityResolver) EnrichEvent(_ context.Context, event domain.CanonicalEvent) (domain.CanonicalEvent, error) {
+	for index := range event.Reviewers {
+		event.Reviewers[index].Email = "alice@example.com"
+	}
+	if event.MergeRequest != nil {
+		for index := range event.MergeRequest.Reviewers {
+			event.MergeRequest.Reviewers[index].Email = "alice@example.com"
+		}
+	}
+	return event, nil
+}
+
 type fakeEventStore struct {
 	event      domain.CanonicalEvent
 	deliveries []domain.Delivery

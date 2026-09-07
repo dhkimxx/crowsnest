@@ -55,23 +55,33 @@ type IngestResult struct {
 }
 
 type IngestService struct {
-	decoders       *DecoderRegistry
-	router         *Router
-	events         ports.EventStore
-	pipelineStates ports.PipelineStateStore
-	logger         *slog.Logger
+	decoders         *DecoderRegistry
+	router           *Router
+	events           ports.EventStore
+	pipelineStates   ports.PipelineStateStore
+	identities       ports.IdentityStore
+	identityResolver ports.EventIdentityResolver
+	logger           *slog.Logger
 }
 
 func NewIngestService(decoders *DecoderRegistry, router *Router, events ports.EventStore, pipelineStates ports.PipelineStateStore, logger *slog.Logger) *IngestService {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	identityStore, _ := events.(ports.IdentityStore)
 	return &IngestService{
 		decoders:       decoders,
 		router:         router,
 		events:         events,
 		pipelineStates: pipelineStates,
+		identities:     identityStore,
 		logger:         logger,
+	}
+}
+
+func (s *IngestService) SetIdentityResolver(resolver ports.EventIdentityResolver) {
+	if s != nil {
+		s.identityResolver = resolver
 	}
 }
 
@@ -93,6 +103,14 @@ func (s *IngestService) Handle(ctx context.Context, headers http.Header, body []
 		}
 		return IngestResult{}, fmt.Errorf("decode webhook: %w", err)
 	}
+	if s.identityResolver != nil {
+		enriched, enrichErr := s.identityResolver.EnrichEvent(ctx, event)
+		event = enriched
+		if enrichErr != nil {
+			s.logger.Warn("GitLab identity enrichment incomplete", "event_key", event.EventKey, "error", enrichErr)
+		}
+	}
+	s.rememberIdentities(ctx, event)
 	route, err := s.router.Route(ctx, event)
 	if err != nil {
 		return IngestResult{}, fmt.Errorf("route webhook event: %w", err)
@@ -127,4 +145,59 @@ func (s *IngestService) Handle(ctx context.Context, headers http.Header, body []
 		DeliveryCount:   len(route.Deliveries),
 		UnresolvedCount: len(route.UnresolvedUsers),
 	}, nil
+}
+
+func (s *IngestService) rememberIdentities(ctx context.Context, event domain.CanonicalEvent) {
+	if s == nil || s.identities == nil {
+		return
+	}
+	for _, identity := range eventIdentities(event) {
+		if identity.Provider == "" {
+			identity.Provider = event.Source
+		}
+		if identity.ProviderID == "" && identity.Username == "" {
+			continue
+		}
+		if identity.Email == "" {
+			continue
+		}
+		if err := s.identities.Upsert(ctx, identity.Provider, identity, true); err != nil {
+			s.logger.Warn("could not remember GitLab identity", "provider_id", identity.ProviderID, "error", err)
+		}
+	}
+}
+
+func eventIdentities(event domain.CanonicalEvent) []domain.Identity {
+	identities := make([]domain.Identity, 0, 12)
+	identities = append(identities, event.Actor)
+	if event.Author != nil {
+		identities = append(identities, *event.Author)
+	}
+	identities = append(identities, event.Reviewers...)
+	identities = append(identities, event.Assignees...)
+	identities = append(identities, event.Mentions...)
+	if event.Pipeline != nil {
+		identities = append(identities, event.Pipeline.CommitAuthor)
+	}
+	if event.MergeRequest != nil {
+		identities = append(identities, event.MergeRequest.Author)
+		identities = append(identities, event.MergeRequest.Reviewers...)
+		identities = append(identities, event.MergeRequest.Assignees...)
+	}
+	if event.Note != nil {
+		if event.Note.MergeRequest != nil {
+			identities = append(identities, event.Note.MergeRequest.Author)
+			identities = append(identities, event.Note.MergeRequest.Reviewers...)
+			identities = append(identities, event.Note.MergeRequest.Assignees...)
+		}
+		if event.Note.Issue != nil {
+			identities = append(identities, event.Note.Issue.Author)
+			identities = append(identities, event.Note.Issue.Assignees...)
+		}
+	}
+	if event.Issue != nil {
+		identities = append(identities, event.Issue.Author)
+		identities = append(identities, event.Issue.Assignees...)
+	}
+	return identities
 }

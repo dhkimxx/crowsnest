@@ -79,6 +79,35 @@ func TestIdentitySyncDryRunDoesNotChangeMappings(t *testing.T) {
 	}
 }
 
+func TestIdentitySyncUsesGitLabEmailWithoutFeishuDirectory(t *testing.T) {
+	store, err := sqlite.Open(":memory:", sqlite.DefaultConfig())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+
+	service := NewIdentitySyncService(
+		fakeUserDirectory{users: []ports.UserRecord{{Identity: domain.Identity{ProviderID: "1", Username: "alice", Email: "alice@example.com"}, Active: true}}},
+		nil,
+		store,
+		[]string{"example.com"},
+	)
+	report, err := service.Sync(context.Background(), false)
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if report.EmailVerification != "gitlab" || report.MappingsEnabled != 1 || report.MappingsUpserted != 1 {
+		t.Fatalf("report = %#v", report)
+	}
+	resolved, err := store.Resolve(context.Background(), []domain.Identity{{Provider: domain.ProviderGitLab, ProviderID: "1"}})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if len(resolved) != 1 || resolved[0].Email != "alice@example.com" {
+		t.Fatalf("resolved = %#v", resolved)
+	}
+}
+
 type fakeUserDirectory struct {
 	users []ports.UserRecord
 }

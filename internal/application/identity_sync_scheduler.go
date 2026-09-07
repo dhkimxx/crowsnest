@@ -49,6 +49,7 @@ func (s *IdentitySyncScheduler) runOnce(ctx context.Context) error {
 	report, err := s.service.Sync(ctx, s.dryRun)
 	s.logger.Info("identity synchronization completed",
 		"dry_run", report.DryRun,
+		"email_verification", report.EmailVerification,
 		"gitlab_users", report.GitLabUsers,
 		"eligible_users", report.EligibleUsers,
 		"feishu_users_found", report.FeishuUsersFound,

@@ -25,6 +25,10 @@ type UserDirectory interface {
 	ListUsers(context.Context) ([]UserRecord, error)
 }
 
+type EventIdentityResolver interface {
+	EnrichEvent(context.Context, domain.CanonicalEvent) (domain.CanonicalEvent, error)
+}
+
 type HookReconcileOptions struct {
 	DryRun bool
 }

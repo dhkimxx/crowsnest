@@ -31,8 +31,13 @@ func NewIdentitySyncService(users ports.UserDirectory, emailDirectory ports.Emai
 
 func (s *IdentitySyncService) Sync(ctx context.Context, dryRun bool) (domain.IdentitySyncReport, error) {
 	report := domain.IdentitySyncReport{DryRun: dryRun}
-	if s == nil || s.users == nil || s.emailDirectory == nil || s.identities == nil {
+	if s == nil || s.users == nil || s.identities == nil {
 		return report, errors.New("identity sync is not configured")
+	}
+	if s.emailDirectory == nil {
+		report.EmailVerification = "gitlab"
+	} else {
+		report.EmailVerification = "feishu"
 	}
 	users, err := s.users.ListUsers(ctx)
 	if err != nil {
@@ -69,15 +74,24 @@ func (s *IdentitySyncService) Sync(ctx context.Context, dryRun bool) (domain.Ide
 		}
 	}
 
-	found, err := s.emailDirectory.LookupEmails(ctx, lookupEmails)
-	if err != nil {
-		return report, fmt.Errorf("lookup Feishu users by email: %w", err)
+	found := make(map[string]ports.DirectoryUser)
+	if s.emailDirectory != nil {
+		found, err = s.emailDirectory.LookupEmails(ctx, lookupEmails)
+		if err != nil {
+			return report, fmt.Errorf("lookup Feishu users by email: %w", err)
+		}
+	} else {
+		for _, item := range candidates {
+			if item.active {
+				found[item.email] = ports.DirectoryUser{Email: item.email}
+			}
+		}
 	}
 	enabledProviderIDs := make([]string, 0, len(candidates))
 	var syncErrors []error
 	for _, item := range candidates {
 		_, feishuFound := found[item.email]
-		if item.active && feishuFound {
+		if item.active && feishuFound && s.emailDirectory != nil {
 			report.FeishuUsersFound++
 		}
 		enabled := item.active && feishuFound

@@ -60,7 +60,7 @@ GitLab 인스턴스의 이벤트를 개인별 실행 알림으로 변환해 Feis
 - Issue 댓글 및 담당자 변경
 - `@username` 멘션
 - GitLab user ID/username에서 사내 이메일로 매핑
-- GitLab Administrator API와 Feishu Contact API를 조합한 사용자 매핑 동기화
+- GitLab Administrator API 기반 사용자 매핑 동기화와 선택적 Feishu Contact 검증
 - 자기 알림 억제
 - 여러 수신 이유를 한 DM으로 병합
 - 사용자별 알림 설정 적용

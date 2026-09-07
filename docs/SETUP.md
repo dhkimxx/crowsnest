@@ -40,6 +40,7 @@ docker compose --env-file .env -f deploy/compose.yaml up --build
 | `CROWSNEST_IDENTITY_SYNC_ENABLED` | GitLab 사용자와 Feishu 사용자 매핑 동기화 Worker 활성화 |
 | `CROWSNEST_IDENTITY_SYNC_DRY_RUN` | `true`이면 사용자 매핑 DB를 변경하지 않음 |
 | `CROWSNEST_IDENTITY_SYNC_INTERVAL` | 사용자 매핑 동기화 주기. 기본 `1h` |
+| `CROWSNEST_IDENTITY_SYNC_VERIFY_FEISHU` | `true`이면 Feishu Contact API로 이메일 존재 여부까지 검증. 기본 `false` |
 | `CROWSNEST_RECIPIENT_ALLOWLIST` | 비어 있으면 전체 발송, 값이 있으면 쉼표로 구분한 이메일에만 발송 |
 | `CROWSNEST_WEBHOOK_SECRET` | 수신 Webhook의 `X-Gitlab-Token` 검증값 |
 | `CROWSNEST_GITLAB_BASE_URL` | GitLab 기본 URL |
@@ -57,7 +58,7 @@ docker compose --env-file .env -f deploy/compose.yaml up --build
 
 ## 사용자 자동 동기화
 
-GitLab Administrator API로 사용자를 읽고, 허용된 이메일 도메인의 사용자만 Feishu Open Platform의 `batch_get_id` API로 확인한다. Feishu에서 확인된 활성 사용자만 SQLite 매핑을 활성화한다. Feishu Contact API 권한 오류나 네트워크 오류가 발생하면 해당 실행에서는 기존 매핑을 변경하지 않는다.
+Webhook 이벤트에서 이메일이 없는 GitLab 사용자 ID/username은 GitLab Administrator API로 보완하고, 확인된 이메일 매핑을 SQLite에 기억한다. 주기 동기화도 GitLab 이메일을 기본 소스로 사용한다. `CROWSNEST_IDENTITY_SYNC_VERIFY_FEISHU=true`일 때만 Feishu Open Platform의 `batch_get_id` API로 이메일 존재 여부를 추가 검증한다. Feishu 검증을 켠 상태에서 Contact API 권한 오류나 네트워크 오류가 발생하면 해당 실행에서는 기존 매핑을 변경하지 않는다.
 
 수동 실행은 기본적으로 dry-run이다.
 

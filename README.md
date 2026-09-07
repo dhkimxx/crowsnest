@@ -27,14 +27,14 @@ docker compose --env-file .env -f deploy/compose.yaml up --build
 
 기본 health endpoint는 `http://127.0.0.1:8080/healthz`이며, Compose는 호스트의 `5680` 포트로 노출한다.
 
-사용자 매핑은 GitLab API와 Feishu Open Platform API를 조합한 `sync-users`로 처리한다.
+사용자 매핑은 GitLab API를 기본 소스로 사용하는 `sync-users`로 처리한다. Feishu Open Platform 사용자 검증은 선택적으로 활성화할 수 있다.
 
 ```bash
 go run ./cmd/crowsnest sync-users --dry-run
 go run ./cmd/crowsnest sync-users --apply
 ```
 
-`CROWSNEST_IDENTITY_SYNC_ENABLED=true` 설정을 사용하면 `serve` 내부 Worker가 주기적으로 동기화한다. Feishu Contact API 권한이 필요하다. 알림 preference는 현재 기본 정책을 사용하며, 향후 API/UI로 관리한다.
+`CROWSNEST_IDENTITY_SYNC_ENABLED=true` 설정을 사용하면 `serve` 내부 Worker가 주기적으로 GitLab 사용자 매핑을 동기화한다. `CROWSNEST_IDENTITY_SYNC_VERIFY_FEISHU=true`를 추가한 경우에만 Feishu Contact API 권한이 필요하다. 알림 preference는 현재 기본 정책을 사용하며, 향후 API/UI로 관리한다.
 
 `CROWSNEST_RECIPIENT_ALLOWLIST`를 설정하면 해당 이메일에만 발송하고, 비워 두면 전체 수신자에게 발송한다.
 

@@ -168,16 +168,18 @@ GitLab user ID / username / email
 
 Payload에 유효한 이메일이 있으면 우선 사용한다. 이메일이 없거나 `[REDACTED]`이면 `IdentityStore`의 ID/username 매핑을 사용한다. Feishu Contact API는 선택적 검증·변환 수단이지 GitLab username을 이메일로 추측하는 수단이 아니다.
 
+Webhook에 이메일이 없는 경우에는 GitLab Adapter가 `/users/:id` 또는 username 검색 API로 사용자 정보를 보완한 뒤 Router에 전달한다. 보완된 이메일은 SQLite IdentityStore에 기억해 다음 이벤트에서 재사용한다. GitLab API 장애가 기본 Webhook 응답을 실패시키지는 않으며, 기존 매핑이 있으면 그것을 사용한다.
+
 ### Identity Sync
 
 사용자 동기화는 GitLab API와 Feishu Open Platform API의 양쪽 디렉터리를 조합하는 별도 Application 흐름이다.
 
 ```text
-GitLab Admin API /users
+GitLab Admin API /users 또는 /users/:id
   → GitLab user ID, username, state, email
   → 허용 도메인·활성 상태 필터
-  → Feishu Contact API /contact/v3/users/batch_get_id
-  → Feishu에 존재하는 이메일만 활성화
+  → (선택) Feishu Contact API /contact/v3/users/batch_get_id
+  → GitLab 이메일 매핑 활성화
   → IdentityStore upsert + stale mapping 비활성화
 ```
 

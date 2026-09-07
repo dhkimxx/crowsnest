@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/dhkimxx/crowsnest/internal/domain"
 	"github.com/dhkimxx/crowsnest/internal/ports"
 )
 
@@ -67,4 +68,46 @@ func TestListUsersPaginatesAndFallsBackToAdminEmails(t *testing.T) {
 		t.Fatalf("external user should be inactive: %#v", users[2])
 	}
 	var _ ports.UserDirectory = controller
+}
+
+func TestEnrichEventLooksUpEachGitLabIdentityOnce(t *testing.T) {
+	var userLookups int
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v4/users/12" {
+			http.NotFound(writer, request)
+			return
+		}
+		userLookups++
+		_ = json.NewEncoder(writer).Encode(map[string]any{
+			"id": 12, "username": "alice", "name": "Alice", "email": "alice@example.com", "state": "active",
+		})
+	}))
+	defer server.Close()
+
+	controller, err := NewHookController(HookConfig{
+		BaseURL:      server.URL,
+		APIToken:     "gitlab-token",
+		WebhookURL:   "http://crowsnest/webhook/gitlab",
+		WebhookToken: "hook-token",
+	})
+	if err != nil {
+		t.Fatalf("NewHookController() error = %v", err)
+	}
+	event := domain.CanonicalEvent{
+		Source: domain.ProviderGitLab,
+		MergeRequest: &domain.MergeRequestDetails{
+			Reviewers: []domain.Identity{
+				{Provider: domain.ProviderGitLab, ProviderID: "12"},
+				{Provider: domain.ProviderGitLab, ProviderID: "12"},
+			},
+			Assignees: []domain.Identity{{Provider: domain.ProviderGitLab, ProviderID: "12"}},
+		},
+	}
+	enriched, err := controller.EnrichEvent(context.Background(), event)
+	if err != nil {
+		t.Fatalf("EnrichEvent() error = %v", err)
+	}
+	if userLookups != 1 || enriched.MergeRequest.Reviewers[0].Email != "alice@example.com" || enriched.MergeRequest.Reviewers[1].Email != "alice@example.com" || enriched.MergeRequest.Assignees[0].Email != "alice@example.com" {
+		t.Fatalf("lookups=%d enriched=%#v", userLookups, enriched)
+	}
 }

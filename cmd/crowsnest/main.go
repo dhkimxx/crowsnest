@@ -90,6 +90,9 @@ func serve(logger *slog.Logger) error {
 		return err
 	}
 	if controller != nil {
+		if resolver, ok := controller.(ports.EventIdentityResolver); ok {
+			ingest.SetIdentityResolver(resolver)
+		}
 		scheduler := application.NewReconcileScheduler(controller, settings.ReconcileInterval, settings.ReconcileDryRun, logger)
 		workers.Add(1)
 		go func() {
@@ -190,13 +193,17 @@ func buildIdentitySyncService(settings config.Settings, store ports.IdentitySync
 	if !ok {
 		return nil, errors.New("configured GitLab adapter does not support user synchronization")
 	}
-	directory, err := feishu.NewClient(feishu.Config{
-		BaseURL:   settings.FeishuBaseURL,
-		AppID:     settings.FeishuAppID,
-		AppSecret: settings.FeishuAppSecret,
-	}, nil)
-	if err != nil {
-		return nil, err
+	var directory ports.EmailDirectory
+	if settings.IdentitySyncVerifyFeishu {
+		feishuDirectory, err := feishu.NewClient(feishu.Config{
+			BaseURL:   settings.FeishuBaseURL,
+			AppID:     settings.FeishuAppID,
+			AppSecret: settings.FeishuAppSecret,
+		}, nil)
+		if err != nil {
+			return nil, err
+		}
+		directory = feishuDirectory
 	}
 	return application.NewIdentitySyncService(users, directory, store, settings.AllowedEmailDomains), nil
 }
