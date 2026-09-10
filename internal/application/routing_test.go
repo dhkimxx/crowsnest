@@ -34,8 +34,121 @@ func TestRouterRoutesPipelineFailureToCommitAuthor(t *testing.T) {
 	if delivery.Notification.Recipient.Value != "carol@example.com" || delivery.Notification.Reasons[0].Code != ReasonCIFailed {
 		t.Fatalf("delivery = %#v", delivery)
 	}
+	if delivery.Notification.URL != "https://gitlab.example/pipeline/31" {
+		t.Fatalf("notification URL = %q", delivery.Notification.URL)
+	}
 	if result.PipelineState == nil || result.PipelineState.Status != "failed" || len(result.PipelineState.Recipients) != 1 {
 		t.Fatalf("pipeline state = %#v", result.PipelineState)
+	}
+}
+
+func TestRouterUsesCommentURLAndAddsParentLink(t *testing.T) {
+	router := NewRouter(nil, nil, nil, []string{"example.com"})
+	event := domain.CanonicalEvent{
+		EventKey: "note-link-1",
+		Source:   domain.ProviderGitLab,
+		Kind:     domain.EventKindNote,
+		Action:   "create",
+		Project:  domain.ProjectRef{ID: "76", Path: "group/project"},
+		Actor:    domain.Identity{Provider: domain.ProviderGitLab, ProviderID: "7", Email: "commenter@example.com"},
+		Object:   domain.ResourceRef{Kind: domain.EventKindMergeRequest, ID: "9001", IID: "12", URL: "https://gitlab.example/group/project/-/merge_requests/12"},
+		Note: &domain.NoteDetails{
+			ID:  "123",
+			URL: "https://gitlab.example/group/project/-/merge_requests/12#note_123",
+			MergeRequest: &domain.MergeRequestDetails{
+				ID:     "9001",
+				IID:    "12",
+				Author: domain.Identity{Provider: domain.ProviderGitLab, ProviderID: "42", Email: "author@example.com"},
+			},
+		},
+	}
+	result, err := router.Route(context.Background(), event)
+	if err != nil {
+		t.Fatalf("Route() error = %v", err)
+	}
+	if len(result.Deliveries) != 1 {
+		t.Fatalf("deliveries = %#v", result.Deliveries)
+	}
+	notification := result.Deliveries[0].Notification
+	if notification.URL != event.Note.URL {
+		t.Fatalf("notification URL = %q", notification.URL)
+	}
+	if len(notification.RelatedLinks) != 1 || notification.RelatedLinks[0].URL != event.Object.URL {
+		t.Fatalf("related links = %#v", notification.RelatedLinks)
+	}
+}
+
+func TestRouterIncludesFailedJobLinks(t *testing.T) {
+	router := NewRouter(nil, nil, &fakePipelineStateStore{}, []string{"example.com"})
+	event := domain.CanonicalEvent{
+		EventKey: "pipeline-links-1",
+		Source:   domain.ProviderGitLab,
+		Kind:     domain.EventKindPipeline,
+		Action:   "failed",
+		Project:  domain.ProjectRef{ID: "76", Path: "group/project"},
+		Actor:    domain.Identity{Provider: domain.ProviderGitLab, ProviderID: "7", Email: "runner@example.com"},
+		Object:   domain.ResourceRef{Kind: domain.EventKindPipeline, ID: "31", URL: "https://gitlab.example/group/project/-/pipelines/31"},
+		Pipeline: &domain.PipelineDetails{
+			Status:       "failed",
+			CommitAuthor: domain.Identity{Provider: domain.ProviderGitLab, ProviderID: "42", Email: "author@example.com"},
+			FailedJobs: []domain.PipelineJob{{
+				ID: "380", Name: "build-aws-dev", Status: "failed", URL: "https://gitlab.example/group/project/-/jobs/380",
+			}},
+		},
+	}
+	result, err := router.Route(context.Background(), event)
+	if err != nil {
+		t.Fatalf("Route() error = %v", err)
+	}
+	if len(result.Deliveries) != 1 || len(result.Deliveries[0].Notification.FailedJobLinks) != 1 {
+		t.Fatalf("deliveries = %#v", result.Deliveries)
+	}
+	if result.Deliveries[0].Notification.FailedJobLinks[0].URL != event.Pipeline.FailedJobs[0].URL {
+		t.Fatalf("failed job links = %#v", result.Deliveries[0].Notification.FailedJobLinks)
+	}
+}
+
+func TestNotificationFactsDistinguishCommitAuthorAndChangedFields(t *testing.T) {
+	pipelineEvent := domain.CanonicalEvent{
+		Kind:   domain.EventKindPipeline,
+		Action: "failed",
+		Actor:  domain.Identity{Name: "Pipeline Trigger"},
+		Pipeline: &domain.PipelineDetails{
+			Status:       "failed",
+			CommitAuthor: domain.Identity{Name: "Commit Author"},
+		},
+	}
+	pipelineFacts := notificationFacts(pipelineEvent)
+	if pipelineFacts["Commit author"] != "Commit Author" || pipelineFacts["Triggered by"] != "Pipeline Trigger" {
+		t.Fatalf("pipeline facts = %#v", pipelineFacts)
+	}
+
+	updateEvent := domain.CanonicalEvent{
+		Kind:       domain.EventKindMergeRequest,
+		Action:     "update",
+		SourceText: "Long existing description that should not hide the actual change.",
+		Changes: []domain.Change{
+			{Field: "description", Before: "old", After: "new"},
+			{Field: "reviewers", Added: []domain.Identity{{Username: "reviewer"}}},
+		},
+	}
+	updateFacts := notificationFacts(updateEvent)
+	if updateFacts["Changed"] != "Description, Reviewers" {
+		t.Fatalf("update facts = %#v", updateFacts)
+	}
+	if text := notificationSourceText(updateEvent); text != "" {
+		t.Fatalf("notification source text = %q", text)
+	}
+
+	unknownChangeEvent := domain.CanonicalEvent{
+		Kind:       domain.EventKindMergeRequest,
+		Action:     "update",
+		SourceText: "Description should be suppressed when an unknown field is still reported as changed.",
+		Changes:    []domain.Change{{Field: "merge_status", Before: "checking", After: "can_be_merged"}},
+	}
+	unknownFacts := notificationFacts(unknownChangeEvent)
+	if unknownFacts["Changed"] != "Merge status" || notificationSourceText(unknownChangeEvent) != "" {
+		t.Fatalf("unknown change handling: facts=%#v source=%q", unknownFacts, notificationSourceText(unknownChangeEvent))
 	}
 }
 

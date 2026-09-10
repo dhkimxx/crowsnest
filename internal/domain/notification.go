@@ -15,20 +15,27 @@ type NotificationReason struct {
 	Text string `json:"text"`
 }
 
+type NotificationLink struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
+}
+
 type Notification struct {
-	EventKey   string               `json:"event_key"`
-	Kind       EventKind            `json:"kind"`
-	Action     string               `json:"action"`
-	Project    ProjectRef           `json:"project"`
-	Object     ResourceRef          `json:"object"`
-	Recipient  RecipientAddress     `json:"recipient"`
-	Reasons    []NotificationReason `json:"reasons"`
-	Title      string               `json:"title"`
-	Summary    string               `json:"summary"`
-	SourceText string               `json:"source_text,omitempty"`
-	URL        string               `json:"url,omitempty"`
-	Facts      map[string]string    `json:"facts,omitempty"`
-	FailedJobs []string             `json:"failed_jobs,omitempty"`
+	EventKey       string               `json:"event_key"`
+	Kind           EventKind            `json:"kind"`
+	Action         string               `json:"action"`
+	Project        ProjectRef           `json:"project"`
+	Object         ResourceRef          `json:"object"`
+	Recipient      RecipientAddress     `json:"recipient"`
+	Reasons        []NotificationReason `json:"reasons"`
+	Title          string               `json:"title"`
+	Summary        string               `json:"summary"`
+	SourceText     string               `json:"source_text,omitempty"`
+	URL            string               `json:"url,omitempty"`
+	Facts          map[string]string    `json:"facts,omitempty"`
+	FailedJobs     []string             `json:"failed_jobs,omitempty"`
+	FailedJobLinks []NotificationLink   `json:"failed_job_links,omitempty"`
+	RelatedLinks   []NotificationLink   `json:"related_links,omitempty"`
 }
 
 type Delivery struct {

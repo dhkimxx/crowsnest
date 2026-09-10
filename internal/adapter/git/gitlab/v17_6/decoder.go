@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -206,7 +207,8 @@ func decodePipeline(event *domain.CanonicalEvent, payload map[string]any) {
 		SHA:          stringValue(attributes["sha"]),
 		Source:       stringValue(attributes["source"]),
 		Status:       stringValue(attributes["status"]),
-		URL:          firstNonEmpty(stringValue(attributes["url"]), stringValue(attributes["web_url"])),
+		URL:          firstHTTPURL(stringValue(attributes["url"]), stringValue(attributes["web_url"]), fallbackPipelineURL(event.Project.URL, stringValue(attributes["id"]))),
+		CommitURL:    firstHTTPURL(stringValue(commit["url"]), stringValue(commit["web_url"])),
 		CommitAuthor: commitAuthor,
 	}
 	if mergeRequest := mapValue(payload, "merge_request"); len(mergeRequest) > 0 {
@@ -219,6 +221,7 @@ func decodePipeline(event *domain.CanonicalEvent, payload map[string]any) {
 			Name:         stringValue(build["name"]),
 			Status:       stringValue(build["status"]),
 			AllowFailure: boolValue(build["allow_failure"]),
+			URL:          firstHTTPURL(stringValue(build["url"]), stringValue(build["web_url"]), fallbackJobURL(event.Project.URL, stringValue(build["id"]))),
 		}
 		if job.Status == "failed" && !job.AllowFailure {
 			pipeline.FailedJobs = append(pipeline.FailedJobs, job)
@@ -272,23 +275,25 @@ func decodeNote(event *domain.CanonicalEvent, payload map[string]any) {
 		Body:         truncate(stringValue(attributes["note"]), 4000),
 		Action:       stringValue(attributes["action"]),
 		NoteableType: stringValue(attributes["noteable_type"]),
-		URL:          stringValue(attributes["url"]),
 		System:       boolValue(attributes["system"]),
 	}
 	if nested := mapValue(payload, "merge_request"); len(nested) > 0 {
 		parsed := mergeRequestDetails(nested, payload, event.Project.URL)
 		note.MergeRequest = &parsed
+		note.URL = firstHTTPURL(stringValue(attributes["url"]), stringValue(attributes["web_url"]), noteAnchorURL(parsed.URL, note.ID), parsed.URL)
 		event.Author = identityPointer(parsed.Author)
 		event.Reviewers = parsed.Reviewers
 		event.Assignees = parsed.Assignees
-		event.Object = domain.ResourceRef{Kind: domain.EventKindMergeRequest, ID: note.ID, IID: parsed.IID, Title: parsed.Title, URL: parsed.URL}
+		event.Object = domain.ResourceRef{Kind: domain.EventKindMergeRequest, ID: parsed.ID, IID: parsed.IID, Title: parsed.Title, URL: parsed.URL}
 	} else if nested := mapValue(payload, "issue"); len(nested) > 0 {
 		parsed := issueDetails(nested, payload, event.Project.URL)
 		note.Issue = &parsed
+		note.URL = firstHTTPURL(stringValue(attributes["url"]), stringValue(attributes["web_url"]), noteAnchorURL(parsed.URL, note.ID), parsed.URL)
 		event.Author = identityPointer(parsed.Author)
 		event.Assignees = parsed.Assignees
-		event.Object = domain.ResourceRef{Kind: domain.EventKindIssue, ID: note.ID, IID: parsed.IID, Title: parsed.Title, URL: parsed.URL}
+		event.Object = domain.ResourceRef{Kind: domain.EventKindIssue, ID: parsed.ID, IID: parsed.IID, Title: parsed.Title, URL: parsed.URL}
 	} else {
+		note.URL = firstHTTPURL(stringValue(attributes["url"]), stringValue(attributes["web_url"]))
 		event.Object = domain.ResourceRef{Kind: domain.EventKindNote, ID: note.ID, URL: note.URL}
 	}
 	event.Note = note
@@ -348,7 +353,7 @@ func mergeRequestDetails(data, payload map[string]any, projectURL string) domain
 		IID:          iid,
 		Title:        stringValue(data["title"]),
 		Description:  truncate(stringValue(data["description"]), 4000),
-		URL:          firstNonEmpty(stringValue(data["url"]), stringValue(data["web_url"]), fallbackURL(projectURL, "merge_requests", iid)),
+		URL:          firstHTTPURL(stringValue(data["url"]), stringValue(data["web_url"]), fallbackURL(projectURL, "merge_requests", iid)),
 		SourceBranch: stringValue(data["source_branch"]),
 		TargetBranch: stringValue(data["target_branch"]),
 		State:        stringValue(data["state"]),
@@ -378,7 +383,7 @@ func issueDetails(data, payload map[string]any, projectURL string) domain.IssueD
 		IID:         iid,
 		Title:       stringValue(data["title"]),
 		Description: truncate(stringValue(data["description"]), 4000),
-		URL:         firstNonEmpty(stringValue(data["url"]), stringValue(data["web_url"]), fallbackURL(projectURL, "issues", iid)),
+		URL:         firstHTTPURL(stringValue(data["url"]), stringValue(data["web_url"]), fallbackURL(projectURL, "issues", iid)),
 		State:       stringValue(data["state"]),
 		Author:      author,
 		Assignees:   assignees,
@@ -389,7 +394,7 @@ func projectRef(data map[string]any) domain.ProjectRef {
 	return domain.ProjectRef{
 		ID:            stringValue(data["id"]),
 		Path:          firstNonEmpty(stringValue(data["path_with_namespace"]), stringValue(data["path"]), stringValue(data["name"])),
-		URL:           firstNonEmpty(stringValue(data["web_url"]), stringValue(data["url"])),
+		URL:           firstHTTPURL(stringValue(data["web_url"]), stringValue(data["homepage"])),
 		DefaultBranch: stringValue(data["default_branch"]),
 	}
 }
@@ -400,7 +405,7 @@ func resourceRef(kind domain.EventKind, data map[string]any) *domain.ResourceRef
 		ID:    stringValue(data["id"]),
 		IID:   stringValue(data["iid"]),
 		Title: stringValue(data["title"]),
-		URL:   firstNonEmpty(stringValue(data["url"]), stringValue(data["web_url"])),
+		URL:   firstHTTPURL(stringValue(data["url"]), stringValue(data["web_url"])),
 	}
 	return &ref
 }
@@ -553,6 +558,43 @@ func fallbackURL(projectURL, resource string, iid string) string {
 		return ""
 	}
 	return strings.TrimRight(projectURL, "/") + "/-/" + resource + "/" + iid
+}
+
+func fallbackPipelineURL(projectURL, id string) string {
+	return fallbackURL(projectURL, "pipelines", id)
+}
+
+func fallbackJobURL(projectURL, id string) string {
+	return fallbackURL(projectURL, "jobs", id)
+}
+
+func noteAnchorURL(resourceURL, noteID string) string {
+	if !validHTTPURL(resourceURL) || noteID == "" {
+		return ""
+	}
+	parsed, err := url.Parse(resourceURL)
+	if err != nil {
+		return ""
+	}
+	parsed.Fragment = "note_" + noteID
+	return parsed.String()
+}
+
+func firstHTTPURL(values ...string) string {
+	for _, value := range values {
+		if validHTTPURL(value) {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func validHTTPURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	return strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")
 }
 
 func mapValue(value any, key ...string) map[string]any {

@@ -51,7 +51,7 @@ func TestDecoderPipelineProjectHook(t *testing.T) {
 	if got.Author == nil || got.Author.Email != "carol@example.com" {
 		t.Fatalf("Author = %#v", got.Author)
 	}
-	if got.Pipeline == nil || len(got.Pipeline.FailedJobs) != 1 || got.Pipeline.FailedJobs[0].Name != "test" {
+	if got.Pipeline == nil || len(got.Pipeline.FailedJobs) != 1 || got.Pipeline.FailedJobs[0].Name != "test" || got.Pipeline.FailedJobs[0].URL != "https://gitlab.example/group/project/-/jobs/1" {
 		t.Fatalf("Pipeline = %#v", got.Pipeline)
 	}
 	if got.OccurredAt == nil || !got.OccurredAt.Equal(time.Date(2026, 9, 4, 0, 1, 0, 0, time.UTC)) {
@@ -122,6 +122,62 @@ func TestDecoderNoteMentionsAndIssueTarget(t *testing.T) {
 	}
 	if got.Object.Kind != domain.EventKindIssue || got.Object.IID != "4" {
 		t.Fatalf("Object = %#v", got.Object)
+	}
+	if got.Note.URL != "https://gitlab.example/group/project/-/issues/4#note_123" {
+		t.Fatalf("Note.URL = %q", got.Note.URL)
+	}
+}
+
+func TestDecoderFallsBackToGitLabDetailURLs(t *testing.T) {
+	payload := map[string]any{
+		"object_kind": "pipeline",
+		"project": map[string]any{
+			"id": 76, "path_with_namespace": "group/project", "web_url": "https://gitlab.example/group/project",
+		},
+		"object_attributes": map[string]any{
+			"id": 31, "iid": 3, "status": "failed", "url": "git@gitlab.example:group/project.git",
+		},
+		"commit": map[string]any{
+			"author": map[string]any{"email": "author@example.com"},
+		},
+		"builds": []any{
+			map[string]any{"id": 380, "name": "test", "status": "failed"},
+		},
+	}
+	event, err := NewDecoder().Decode(context.Background(), http.Header{"X-Gitlab-Event": []string{"Pipeline Hook"}}, marshalPayload(t, payload))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if event.Pipeline.URL != "https://gitlab.example/group/project/-/pipelines/31" {
+		t.Fatalf("Pipeline.URL = %q", event.Pipeline.URL)
+	}
+	if event.Pipeline.FailedJobs[0].URL != "https://gitlab.example/group/project/-/jobs/380" {
+		t.Fatalf("Pipeline.FailedJobs = %#v", event.Pipeline.FailedJobs)
+	}
+}
+
+func TestDecoderBuildsCommentAnchorWhenWebhookURLIsMissing(t *testing.T) {
+	payload := map[string]any{
+		"object_kind": "note",
+		"project": map[string]any{
+			"id": 76, "path_with_namespace": "group/project", "web_url": "https://gitlab.example/group/project",
+		},
+		"object_attributes": map[string]any{
+			"id": 123, "action": "create", "note": "Please take a look.", "noteable_type": "MergeRequest",
+		},
+		"merge_request": map[string]any{
+			"id": 9001, "iid": 12, "title": "Improve API", "url": "https://gitlab.example/group/project/-/merge_requests/12",
+		},
+	}
+	event, err := NewDecoder().Decode(context.Background(), http.Header{"X-Gitlab-Event": []string{"Note Hook"}}, marshalPayload(t, payload))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if event.Note == nil || event.Note.URL != "https://gitlab.example/group/project/-/merge_requests/12#note_123" {
+		t.Fatalf("Note = %#v", event.Note)
+	}
+	if event.Object.ID != "9001" {
+		t.Fatalf("Object = %#v", event.Object)
 	}
 }
 

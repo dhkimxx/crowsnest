@@ -55,6 +55,7 @@ type PipelineJob struct {
 	Name         string `json:"name,omitempty"`
 	Status       string `json:"status,omitempty"`
 	AllowFailure bool   `json:"allow_failure,omitempty"`
+	URL          string `json:"url,omitempty"`
 }
 
 type PipelineDetails struct {
@@ -66,6 +67,7 @@ type PipelineDetails struct {
 	Source       string        `json:"source,omitempty"`
 	Status       string        `json:"status,omitempty"`
 	URL          string        `json:"url,omitempty"`
+	CommitURL    string        `json:"commit_url,omitempty"`
 	CommitAuthor Identity      `json:"commit_author,omitempty"`
 	MergeRequest *ResourceRef  `json:"merge_request,omitempty"`
 	FailedJobs   []PipelineJob `json:"failed_jobs,omitempty"`

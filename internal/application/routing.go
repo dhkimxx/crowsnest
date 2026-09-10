@@ -109,19 +109,21 @@ func (r *Router) Route(ctx context.Context, event domain.CanonicalEvent) (RouteR
 		delivery := domain.Delivery{
 			Key: deliveryKey(event, item.address, reasonGroup),
 			Notification: domain.Notification{
-				EventKey:   event.EventKey,
-				Kind:       event.Kind,
-				Action:     event.Action,
-				Project:    event.Project,
-				Object:     event.Object,
-				Recipient:  item.address,
-				Reasons:    reasons,
-				Title:      notificationTitle(event, reasons),
-				Summary:    notificationSummary(event),
-				SourceText: event.SourceText,
-				URL:        event.Object.URL,
-				Facts:      notificationFacts(event),
-				FailedJobs: failedJobNames(event),
+				EventKey:       event.EventKey,
+				Kind:           event.Kind,
+				Action:         event.Action,
+				Project:        event.Project,
+				Object:         event.Object,
+				Recipient:      item.address,
+				Reasons:        reasons,
+				Title:          notificationTitle(event, reasons),
+				Summary:        notificationSummary(event),
+				SourceText:     notificationSourceText(event),
+				URL:            notificationURL(event),
+				Facts:          notificationFacts(event),
+				FailedJobs:     failedJobNames(event),
+				FailedJobLinks: failedJobLinks(event),
+				RelatedLinks:   relatedLinks(event, notificationURL(event)),
 			},
 		}
 		result.Deliveries = append(result.Deliveries, delivery)
@@ -544,12 +546,18 @@ func notificationFacts(event domain.CanonicalEvent) map[string]string {
 	if action := eventActionLabel(event); action != "" {
 		facts["Status"] = action
 	}
+	if changed := changedFieldLabels(event.Changes); len(changed) > 0 {
+		facts["Changed"] = joinLimitedLabels(changed, 6)
+	}
 	if event.Pipeline != nil {
 		if event.Pipeline.Ref != "" {
 			facts["Branch"] = event.Pipeline.Ref
 		}
 		if event.Pipeline.Source != "" {
 			facts["Source"] = strings.ToUpper(event.Pipeline.Source[:1]) + event.Pipeline.Source[1:]
+		}
+		if author := identityDisplay(event.Pipeline.CommitAuthor); author != "" {
+			facts["Commit author"] = author
 		}
 	}
 	if event.MergeRequest != nil && (event.MergeRequest.SourceBranch != "" || event.MergeRequest.TargetBranch != "") {
@@ -559,6 +567,88 @@ func notificationFacts(event domain.CanonicalEvent) map[string]string {
 		facts["State"] = event.Issue.State
 	}
 	return facts
+}
+
+func notificationSourceText(event domain.CanonicalEvent) string {
+	if event.Action == "update" && len(changedFieldLabels(event.Changes)) > 0 && (event.Kind == domain.EventKindMergeRequest || event.Kind == domain.EventKindIssue) {
+		return ""
+	}
+	return event.SourceText
+}
+
+func changedFieldLabels(changes []domain.Change) []string {
+	labels := make([]string, 0, len(changes))
+	seen := make(map[string]struct{}, len(changes))
+	for _, change := range changes {
+		label := changedFieldLabel(change.Field)
+		if label == "" {
+			continue
+		}
+		if _, ok := seen[label]; ok {
+			continue
+		}
+		seen[label] = struct{}{}
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	return labels
+}
+
+func joinLimitedLabels(values []string, limit int) string {
+	if len(values) <= limit {
+		return strings.Join(values, ", ")
+	}
+	return strings.Join(values[:limit], ", ") + fmt.Sprintf(" +%d more", len(values)-limit)
+}
+
+func changedFieldLabel(field string) string {
+	switch field {
+	case "reviewers":
+		return "Reviewers"
+	case "assignees":
+		return "Assignees"
+	case "title":
+		return "Title"
+	case "description":
+		return "Description"
+	case "state":
+		return "State"
+	case "labels":
+		return "Labels"
+	case "source_branch":
+		return "Source branch"
+	case "target_branch":
+		return "Target branch"
+	case "milestone", "milestone_id":
+		return "Milestone"
+	default:
+		field = strings.TrimSpace(field)
+		if field == "" {
+			return ""
+		}
+		words := strings.FieldsFunc(field, func(r rune) bool { return r == '_' || r == '-' })
+		for index, word := range words {
+			word = strings.ToLower(word)
+			if word == "" {
+				continue
+			}
+			if index == 0 {
+				word = strings.ToUpper(word[:1]) + word[1:]
+			}
+			words[index] = word
+		}
+		return strings.Join(words, " ")
+	}
+}
+
+func identityDisplay(identity domain.Identity) string {
+	if identity.Name != "" {
+		return identity.Name
+	}
+	if identity.Username != "" {
+		return "@" + identity.Username
+	}
+	return ""
 }
 
 func notificationReasonTitle(event domain.CanonicalEvent, reasonCode string) string {
@@ -686,4 +776,56 @@ func failedJobNames(event domain.CanonicalEvent) []string {
 		}
 	}
 	return names
+}
+
+func failedJobLinks(event domain.CanonicalEvent) []domain.NotificationLink {
+	if event.Pipeline == nil {
+		return nil
+	}
+	links := make([]domain.NotificationLink, 0, len(event.Pipeline.FailedJobs))
+	for _, job := range event.Pipeline.FailedJobs {
+		if job.Name == "" || job.URL == "" {
+			continue
+		}
+		links = append(links, domain.NotificationLink{Label: job.Name, URL: job.URL})
+	}
+	return links
+}
+
+func notificationURL(event domain.CanonicalEvent) string {
+	if event.Kind == domain.EventKindNote && event.Note != nil && event.Note.URL != "" {
+		return event.Note.URL
+	}
+	return event.Object.URL
+}
+
+func relatedLinks(event domain.CanonicalEvent, primaryURL string) []domain.NotificationLink {
+	links := make([]domain.NotificationLink, 0, 2)
+	add := func(label, target string) {
+		if label == "" || target == "" || target == primaryURL {
+			return
+		}
+		for _, link := range links {
+			if link.URL == target {
+				return
+			}
+		}
+		links = append(links, domain.NotificationLink{Label: label, URL: target})
+	}
+
+	if event.Kind == domain.EventKindNote {
+		switch event.Object.Kind {
+		case domain.EventKindMergeRequest:
+			add("Open Merge Request", event.Object.URL)
+		case domain.EventKindIssue:
+			add("Open Issue", event.Object.URL)
+		}
+	}
+	if event.Kind == domain.EventKindPipeline && event.Pipeline != nil {
+		if event.Pipeline.MergeRequest != nil {
+			add("Open Merge Request", event.Pipeline.MergeRequest.URL)
+		}
+		add("Open Commit", event.Pipeline.CommitURL)
+	}
+	return links
 }
