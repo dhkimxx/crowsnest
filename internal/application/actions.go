@@ -9,12 +9,9 @@ import (
 const muteDuration = 30 * 24 * time.Hour
 
 func notificationActions() []domain.NotificationAction {
-	return []domain.NotificationAction{muteAction(false)}
+	return []domain.NotificationAction{settingsAction()}
 }
 
-func muteAction(muted bool) domain.NotificationAction {
-	if muted {
-		return domain.NotificationAction{Action: domain.ActionUnmuteAll, Label: "Unmute"}
-	}
-	return domain.NotificationAction{Action: domain.ActionMuteAll, Label: "Mute 30d"}
+func settingsAction() domain.NotificationAction {
+	return domain.NotificationAction{Action: domain.ActionOpenSettings, Label: "⚙ Settings"}
 }

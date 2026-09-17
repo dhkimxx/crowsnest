@@ -47,7 +47,7 @@ func TestRouterRoutesPipelineFailureToCommitAuthor(t *testing.T) {
 	if len(delivery.Notification.Actions) != 1 {
 		t.Fatalf("notification actions = %#v", delivery.Notification.Actions)
 	}
-	if action := delivery.Notification.Actions[0]; action.Action != domain.ActionMuteAll || action.Label != "Mute 30d" {
+	if action := delivery.Notification.Actions[0]; action.Action != domain.ActionOpenSettings || action.Label != "⚙ Settings" {
 		t.Fatalf("notification action = %#v", action)
 	}
 	if result.PipelineState == nil || result.PipelineState.Status != "failed" || len(result.PipelineState.Recipients) != 1 {

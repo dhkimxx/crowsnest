@@ -34,9 +34,10 @@ func (f *fakeInteractionStore) DeliveryByMessageID(_ context.Context, _ string) 
 }
 
 type fakePreferenceStore struct {
-	calls   int
-	address domain.RecipientAddress
-	until   *time.Time
+	calls     int
+	address   domain.RecipientAddress
+	until     *time.Time
+	muteState domain.PreferenceState
 }
 
 func (f *fakePreferenceStore) Enabled(context.Context, domain.RecipientAddress, domain.EventKind, string, string) (bool, error) {
@@ -50,6 +51,10 @@ func (f *fakePreferenceStore) SetMute(_ context.Context, address domain.Recipien
 	return nil
 }
 
+func (f *fakePreferenceStore) MuteState(context.Context, domain.RecipientAddress) (domain.PreferenceState, error) {
+	return f.muteState, nil
+}
+
 func interactionDelivery() *ports.RecordedDelivery {
 	return &ports.RecordedDelivery{
 		Key: "gitlab:header:pipeline-1:carol@example.com:ci_failed",
@@ -59,33 +64,52 @@ func interactionDelivery() *ports.RecordedDelivery {
 			Action:    "failed",
 			Recipient: domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "carol@example.com"},
 			Reasons:   []domain.NotificationReason{{Code: ReasonCIFailed, Text: "The pipeline for your commit failed."}},
-			Actions:   []domain.NotificationAction{muteAction(false)},
+			Actions:   []domain.NotificationAction{settingsAction()},
 		},
 	}
 }
 
-func muteInteraction() domain.Interaction {
+func cardInteraction(action string) domain.Interaction {
 	return domain.Interaction{
 		EventID:   "evt-1",
 		MessageID: "om_123",
 		ActorID:   "ou_1",
-		Action:    domain.ActionMuteAll,
+		Action:    action,
+	}
+}
+
+func TestInteractionServiceOpensSettings(t *testing.T) {
+	until := time.Date(2026, 10, 17, 6, 0, 0, 0, time.UTC)
+	preferences := &fakePreferenceStore{muteState: domain.PreferenceState{Muted: true, MutedUntil: &until}}
+	service := NewInteractionService(&fakeInteractionStore{delivery: interactionDelivery()}, preferences, nil)
+
+	result, err := service.Handle(context.Background(), cardInteraction(domain.ActionOpenSettings))
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if result.Status != domain.InteractionApplied || result.Settings == nil {
+		t.Fatalf("result = %#v", result)
+	}
+	if !result.Settings.Muted || result.Settings.MutedUntil == nil || !result.Settings.MutedUntil.Equal(until) {
+		t.Fatalf("settings = %#v", result.Settings)
+	}
+	if preferences.calls != 0 {
+		t.Fatalf("opening settings must not write a preference, calls = %d", preferences.calls)
 	}
 }
 
 func TestInteractionServiceMutesAllForThirtyDays(t *testing.T) {
-	store := &fakeInteractionStore{delivery: interactionDelivery()}
 	preferences := &fakePreferenceStore{}
-	service := NewInteractionService(store, preferences, nil)
+	service := NewInteractionService(&fakeInteractionStore{delivery: interactionDelivery()}, preferences, nil)
 	fixed := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
 	service.clock = func() time.Time { return fixed }
 
-	result, err := service.Handle(context.Background(), muteInteraction())
+	result, err := service.Handle(context.Background(), cardInteraction(domain.ActionMuteAll))
 	if err != nil {
 		t.Fatalf("Handle() error = %v", err)
 	}
-	if result.Status != domain.InteractionApplied {
-		t.Fatalf("status = %q", result.Status)
+	if result.Status != domain.InteractionApplied || result.Settings == nil || !result.Settings.Muted {
+		t.Fatalf("result = %#v", result)
 	}
 	if preferences.calls != 1 || preferences.until == nil {
 		t.Fatalf("preference call = %d until = %v", preferences.calls, preferences.until)
@@ -96,39 +120,39 @@ func TestInteractionServiceMutesAllForThirtyDays(t *testing.T) {
 	if preferences.address.Value != "carol@example.com" {
 		t.Fatalf("preference address = %#v", preferences.address)
 	}
-	if result.Notification == nil || len(result.Notification.Actions) != 1 {
-		t.Fatalf("notification = %#v", result.Notification)
-	}
-	if action := result.Notification.Actions[0]; action.Action != domain.ActionUnmuteAll || action.Label != "Unmute" {
-		t.Fatalf("action = %#v", action)
-	}
 	if result.Toast == "" {
 		t.Fatal("expected a toast message")
-	}
-	if store.finished["evt-1"] != domain.InteractionApplied {
-		t.Fatalf("finished = %#v", store.finished)
 	}
 }
 
 func TestInteractionServiceUnmutesAll(t *testing.T) {
-	store := &fakeInteractionStore{delivery: interactionDelivery()}
 	preferences := &fakePreferenceStore{}
-	service := NewInteractionService(store, preferences, nil)
+	service := NewInteractionService(&fakeInteractionStore{delivery: interactionDelivery()}, preferences, nil)
 
-	interaction := muteInteraction()
-	interaction.Action = domain.ActionUnmuteAll
-	result, err := service.Handle(context.Background(), interaction)
+	result, err := service.Handle(context.Background(), cardInteraction(domain.ActionUnmuteAll))
 	if err != nil {
 		t.Fatalf("Handle() error = %v", err)
 	}
-	if result.Status != domain.InteractionApplied || preferences.calls != 1 {
-		t.Fatalf("status = %q preference calls = %d", result.Status, preferences.calls)
+	if result.Status != domain.InteractionApplied || result.Settings == nil || result.Settings.Muted {
+		t.Fatalf("result = %#v", result)
 	}
-	if preferences.until != nil {
-		t.Fatalf("unmute should clear the deadline, got %v", preferences.until)
+	if preferences.calls != 1 || preferences.until != nil {
+		t.Fatalf("unmute should clear the deadline, calls = %d until = %v", preferences.calls, preferences.until)
 	}
-	if action := result.Notification.Actions[0]; action.Action != domain.ActionMuteAll || action.Label != "Mute 30d" {
-		t.Fatalf("action = %#v", action)
+}
+
+func TestInteractionServiceClosesSettings(t *testing.T) {
+	service := NewInteractionService(&fakeInteractionStore{delivery: interactionDelivery()}, &fakePreferenceStore{}, nil)
+
+	result, err := service.Handle(context.Background(), cardInteraction(domain.ActionCloseSettings))
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if result.Status != domain.InteractionApplied || result.Notification == nil || result.Settings != nil {
+		t.Fatalf("result = %#v", result)
+	}
+	if result.Notification.EventKey != "event-1" {
+		t.Fatalf("notification = %#v", result.Notification)
 	}
 }
 
@@ -137,7 +161,7 @@ func TestInteractionServiceSkipsDuplicate(t *testing.T) {
 	preferences := &fakePreferenceStore{}
 	service := NewInteractionService(store, preferences, nil)
 
-	result, err := service.Handle(context.Background(), muteInteraction())
+	result, err := service.Handle(context.Background(), cardInteraction(domain.ActionMuteAll))
 	if err != nil {
 		t.Fatalf("Handle() error = %v", err)
 	}
@@ -151,12 +175,12 @@ func TestInteractionServiceRejectsUnknownMessage(t *testing.T) {
 	preferences := &fakePreferenceStore{}
 	service := NewInteractionService(store, preferences, nil)
 
-	result, err := service.Handle(context.Background(), muteInteraction())
+	result, err := service.Handle(context.Background(), cardInteraction(domain.ActionOpenSettings))
 	if err != nil {
 		t.Fatalf("Handle() error = %v", err)
 	}
-	if result.Status != domain.InteractionRejected || preferences.calls != 0 || result.Toast == "" {
-		t.Fatalf("result = %#v preference calls = %d", result, preferences.calls)
+	if result.Status != domain.InteractionRejected || result.Toast == "" {
+		t.Fatalf("result = %#v", result)
 	}
 	if store.finished["evt-1"] != domain.InteractionRejected {
 		t.Fatalf("finished = %#v", store.finished)
@@ -168,9 +192,7 @@ func TestInteractionServiceIgnoresUnsupportedAction(t *testing.T) {
 	preferences := &fakePreferenceStore{}
 	service := NewInteractionService(store, preferences, nil)
 
-	interaction := muteInteraction()
-	interaction.Action = "trigger_pipeline_rerun"
-	result, err := service.Handle(context.Background(), interaction)
+	result, err := service.Handle(context.Background(), cardInteraction("trigger_pipeline_rerun"))
 	if err != nil {
 		t.Fatalf("Handle() error = %v", err)
 	}

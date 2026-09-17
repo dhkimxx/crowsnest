@@ -139,3 +139,32 @@ func TestInteractionWorkerRejectsUnknownCallback(t *testing.T) {
 }
 
 var _ ports.InteractionHandler = fakeInteractionHandler{}
+
+func TestInteractionWorkerRendersSettingsPanel(t *testing.T) {
+	worker, err := NewInteractionWorker(InteractionWorkerConfig{
+		AppID:     "cli_test",
+		AppSecret: "secret",
+		Handler: fakeInteractionHandler{result: domain.InteractionResult{
+			Status:   domain.InteractionApplied,
+			Settings: &domain.PreferenceState{Muted: true},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewInteractionWorker() error = %v", err)
+	}
+	response, err := worker.handleCardAction(context.Background(), cardActionEvent())
+	if err != nil {
+		t.Fatalf("handleCardAction() error = %v", err)
+	}
+	if response.Card == nil || response.Card.Type != "raw" {
+		t.Fatalf("card = %#v", response.Card)
+	}
+	payload, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	text := string(payload)
+	if !strings.Contains(text, "Crowsnest settings") || !strings.Contains(text, `"action":"unmute_all"`) {
+		t.Fatalf("response does not contain the settings panel: %s", text)
+	}
+}

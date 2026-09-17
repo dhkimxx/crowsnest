@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dhkimxx/crowsnest/internal/domain"
@@ -49,6 +50,36 @@ func (s *Store) SetMute(ctx context.Context, address domain.RecipientAddress, un
 		return fmt.Errorf("write notification preference: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) MuteState(ctx context.Context, address domain.RecipientAddress) (domain.PreferenceState, error) {
+	email := usableEmail(address.Value)
+	if email == "" {
+		return domain.PreferenceState{}, nil
+	}
+	var enabled int
+	var mutedUntil string
+	err := s.db.QueryRowContext(ctx, `SELECT enabled, muted_until FROM notification_preferences WHERE email = ?`, email).Scan(&enabled, &mutedUntil)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.PreferenceState{}, nil
+	}
+	if err != nil {
+		return domain.PreferenceState{}, fmt.Errorf("read notification preference: %w", err)
+	}
+	if enabled != 0 {
+		return domain.PreferenceState{}, nil
+	}
+	if strings.TrimSpace(mutedUntil) == "" {
+		return domain.PreferenceState{Muted: true}, nil
+	}
+	until, parseErr := time.Parse(timestampFormat, mutedUntil)
+	if parseErr != nil {
+		return domain.PreferenceState{Muted: true}, nil
+	}
+	if !time.Now().UTC().Before(until) {
+		return domain.PreferenceState{}, nil
+	}
+	return domain.PreferenceState{Muted: true, MutedUntil: &until}, nil
 }
 
 func (s *Store) BeginInteraction(ctx context.Context, record ports.InteractionRecord) (bool, error) {

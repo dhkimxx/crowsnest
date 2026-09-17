@@ -71,14 +71,19 @@ func (w *InteractionWorker) handleCardAction(ctx context.Context, event *callbac
 		w.logger.Error("could not handle card interaction", "error", err)
 		return toastResponse("error", "This action could not be applied."), nil
 	}
-	if result.Notification == nil {
+	var cardJSON []byte
+	switch {
+	case result.Settings != nil:
+		cardJSON, err = RenderSettingsCard(*result.Settings)
+	case result.Notification != nil:
+		cardJSON, err = RenderCard(*result.Notification)
+	default:
 		text := result.Toast
 		if text == "" {
 			text = "This action was already handled."
 		}
 		return toastResponse(interactionToastType(result.Status), text), nil
 	}
-	cardJSON, err := RenderCard(*result.Notification)
 	if err != nil {
 		w.logger.Error("could not render updated card", "error", err)
 		return toastResponse("error", "This action could not be displayed."), nil

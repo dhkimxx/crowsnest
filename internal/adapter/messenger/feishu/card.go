@@ -144,6 +144,55 @@ func joinLimited(values []string, limit int) string {
 	return strings.Join(values[:limit], ", ") + fmt.Sprintf(" +%d more", len(values)-limit)
 }
 
+func RenderSettingsCard(state domain.PreferenceState) ([]byte, error) {
+	status := "Alerts: On"
+	if state.Muted {
+		if state.MutedUntil != nil {
+			status = "Alerts: Muted until " + state.MutedUntil.UTC().Format("2006-01-02") + " (UTC)"
+		} else {
+			status = "Alerts: Muted"
+		}
+	}
+	actions := make([]any, 0, 2)
+	if state.Muted {
+		actions = append(actions, map[string]any{
+			"tag":   "button",
+			"type":  "primary",
+			"text":  map[string]any{"tag": "plain_text", "content": "🔔 Unmute"},
+			"value": map[string]any{"action": domain.ActionUnmuteAll},
+		})
+	} else {
+		actions = append(actions, map[string]any{
+			"tag":   "button",
+			"type":  "default",
+			"text":  map[string]any{"tag": "plain_text", "content": "🔕 Mute 30d"},
+			"value": map[string]any{"action": domain.ActionMuteAll},
+		})
+	}
+	actions = append(actions, map[string]any{
+		"tag":   "button",
+		"type":  "default",
+		"text":  map[string]any{"tag": "plain_text", "content": "Close"},
+		"value": map[string]any{"action": domain.ActionCloseSettings},
+	})
+	card := map[string]any{
+		"config": map[string]any{"wide_screen_mode": true, "update_multi": true},
+		"header": map[string]any{
+			"template": "grey",
+			"title":    map[string]any{"tag": "plain_text", "content": "Crowsnest settings"},
+		},
+		"elements": []any{
+			map[string]any{
+				"tag":  "div",
+				"text": map[string]any{"tag": "plain_text", "content": status},
+			},
+			map[string]any{"tag": "hr"},
+			map[string]any{"tag": "action", "actions": actions},
+		},
+	}
+	return json.Marshal(card)
+}
+
 func actionButtons(actions []domain.NotificationAction) []any {
 	buttons := make([]any, 0, len(actions))
 	for _, action := range actions {

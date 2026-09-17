@@ -455,3 +455,49 @@ func TestStoreNormalizesLegacyEventTimestamps(t *testing.T) {
 		t.Fatalf("normalized event timestamps = %q %q %q", received, occurred, created)
 	}
 }
+
+func TestStoreMuteState(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	address := domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "carol@example.com"}
+
+	state, err := store.MuteState(ctx, address)
+	if err != nil {
+		t.Fatalf("MuteState() error = %v", err)
+	}
+	if state.Muted {
+		t.Fatalf("default state should not be muted: %#v", state)
+	}
+	future := time.Now().UTC().Add(30 * 24 * time.Hour).Truncate(time.Second)
+	if err := store.SetMute(ctx, address, &future); err != nil {
+		t.Fatalf("SetMute() error = %v", err)
+	}
+	state, err = store.MuteState(ctx, address)
+	if err != nil {
+		t.Fatalf("MuteState() error = %v", err)
+	}
+	if !state.Muted || state.MutedUntil == nil || !state.MutedUntil.Equal(future) {
+		t.Fatalf("muted state = %#v, want until %v", state, future)
+	}
+	past := time.Now().UTC().Add(-time.Minute)
+	if err := store.SetMute(ctx, address, &past); err != nil {
+		t.Fatalf("SetMute() error = %v", err)
+	}
+	state, err = store.MuteState(ctx, address)
+	if err != nil {
+		t.Fatalf("MuteState() error = %v", err)
+	}
+	if state.Muted {
+		t.Fatalf("expired mute should report as unmuted: %#v", state)
+	}
+	if err := store.SetMute(ctx, address, nil); err != nil {
+		t.Fatalf("SetMute() error = %v", err)
+	}
+	state, err = store.MuteState(ctx, address)
+	if err != nil {
+		t.Fatalf("MuteState() error = %v", err)
+	}
+	if state.Muted {
+		t.Fatalf("unmuted state = %#v", state)
+	}
+}

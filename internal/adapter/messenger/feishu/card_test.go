@@ -3,6 +3,7 @@ package feishu
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dhkimxx/crowsnest/internal/domain"
 )
@@ -140,6 +141,31 @@ func TestRenderCardIncludesNotificationActions(t *testing.T) {
 	for _, expected := range []string{`"update_multi":true`, `Mute 30d`, `"action":"mute_all"`, `"tag":"action"`} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("card does not contain %q: %s", expected, content)
+		}
+	}
+}
+
+func TestRenderSettingsCard(t *testing.T) {
+	card, err := RenderSettingsCard(domain.PreferenceState{})
+	if err != nil {
+		t.Fatalf("RenderSettingsCard() error = %v", err)
+	}
+	content := string(card)
+	for _, expected := range []string{`"update_multi":true`, "Crowsnest settings", "Alerts: On", `"action":"mute_all"`, `"action":"close_settings"`} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("settings card does not contain %q: %s", expected, content)
+		}
+	}
+
+	until := time.Date(2026, 10, 17, 6, 0, 0, 0, time.UTC)
+	card, err = RenderSettingsCard(domain.PreferenceState{Muted: true, MutedUntil: &until})
+	if err != nil {
+		t.Fatalf("RenderSettingsCard() error = %v", err)
+	}
+	content = string(card)
+	for _, expected := range []string{`"action":"unmute_all"`, "Muted until 2026-10-17"} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("muted settings card does not contain %q: %s", expected, content)
 		}
 	}
 }

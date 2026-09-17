@@ -131,7 +131,7 @@ Real delivery mode requires the Feishu Self-Built App Bot feature and message-se
 
 ## Card interactions
 
-Notification cards include a single mute toggle so a recipient can pause all alerts for 30 days without editor access to the database. When Feishu app credentials are configured and `CROWSNEST_DRY_RUN=false`, `serve` also opens a Feishu long connection (WebSocket) to receive card callbacks, so no public callback URL is required.
+Notification cards expose a single **Settings** button that opens a control panel card: it shows the current alert state and offers mute (30 days), unmute, and close. The panel is rendered from the database on every click, so it never shows stale state. When Feishu app credentials are configured and `CROWSNEST_DRY_RUN=false`, `serve` also opens a Feishu long connection (WebSocket) to receive card callbacks, so no public callback URL is required.
 
 Console steps, in order:
 
@@ -142,12 +142,13 @@ Console steps, in order:
 
 Runtime behavior:
 
-- The callback handler must respond within 3 seconds; Crowsnest applies the toggle and returns the updated card in the response body.
+- The callback handler must respond within 3 seconds; Crowsnest applies the action and returns the updated card in the response body.
+- Closing the panel restores the original notification card from the stored delivery payload.
 - `deliveries.provider_message_id` maps a clicked card back to its delivery and recipient. Callbacks for unknown message IDs are rejected.
 - Interactions are recorded in `interaction_events` keyed by the callback event ID, so Feishu retries are deduplicated.
 - Card interactions are accepted for 30 days after sending; card updates only take effect for 14 days.
 - Muting sets a 30-day deadline for that recipient; deliveries are skipped until it passes. The deadline is evaluated lazily on read, so notifications resume automatically without a scheduler.
-- Unmuting clears the deadline from the card button. Because a muted recipient receives no new cards, the last received card (interactable for 30 days) is the control surface for resuming.
+- Unmuting clears the deadline from the panel. Because a muted recipient receives no new cards, the last received card (interactable for 30 days) is the control surface for resuming.
 
 ## Security notes
 

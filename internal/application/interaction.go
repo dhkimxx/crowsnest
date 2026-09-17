@@ -52,17 +52,46 @@ func (s *InteractionService) Handle(ctx context.Context, interaction domain.Inte
 }
 
 func (s *InteractionService) apply(ctx context.Context, interaction domain.Interaction) domain.InteractionResult {
-	if interaction.Action != domain.ActionMuteAll && interaction.Action != domain.ActionUnmuteAll {
+	switch interaction.Action {
+	case domain.ActionOpenSettings:
+		return s.openSettings(ctx, interaction)
+	case domain.ActionCloseSettings:
+		return s.closeSettings(ctx, interaction)
+	case domain.ActionMuteAll, domain.ActionUnmuteAll:
+		return s.setMute(ctx, interaction)
+	default:
 		s.logger.Warn("unsupported interaction action", "action", interaction.Action)
 		return domain.InteractionResult{Status: domain.InteractionIgnored}
 	}
-	record, err := s.store.DeliveryByMessageID(ctx, interaction.MessageID)
-	if err != nil {
-		s.logger.Error("interaction delivery lookup failed", "error", err)
-		return domain.InteractionResult{Status: domain.InteractionRejected, Toast: "This alert could not be loaded."}
+}
+
+func (s *InteractionService) openSettings(ctx context.Context, interaction domain.Interaction) domain.InteractionResult {
+	record, rejected, ok := s.delivery(ctx, interaction)
+	if !ok {
+		return rejected
 	}
-	if record == nil {
-		return domain.InteractionResult{Status: domain.InteractionRejected, Toast: "This alert can no longer be updated."}
+	state, err := s.preferences.MuteState(ctx, record.Notification.Recipient)
+	if err != nil {
+		s.logger.Error("could not read notification preference", "error", err)
+		return domain.InteractionResult{Status: domain.InteractionRejected, Toast: "Settings could not be loaded."}
+	}
+	s.logger.Info("interaction applied", "action", interaction.Action, "delivery_key", record.Key, "actor", interaction.ActorID)
+	return domain.InteractionResult{Status: domain.InteractionApplied, Settings: &state}
+}
+
+func (s *InteractionService) closeSettings(ctx context.Context, interaction domain.Interaction) domain.InteractionResult {
+	record, rejected, ok := s.delivery(ctx, interaction)
+	if !ok {
+		return rejected
+	}
+	s.logger.Info("interaction applied", "action", interaction.Action, "delivery_key", record.Key, "actor", interaction.ActorID)
+	return domain.InteractionResult{Status: domain.InteractionApplied, Notification: &record.Notification}
+}
+
+func (s *InteractionService) setMute(ctx context.Context, interaction domain.Interaction) domain.InteractionResult {
+	record, rejected, ok := s.delivery(ctx, interaction)
+	if !ok {
+		return rejected
 	}
 	muted := interaction.Action == domain.ActionMuteAll
 	var until *time.Time
@@ -74,20 +103,23 @@ func (s *InteractionService) apply(ctx context.Context, interaction domain.Inter
 		s.logger.Error("could not update notification preference", "error", err)
 		return domain.InteractionResult{Status: domain.InteractionRejected, Toast: "This action could not be applied."}
 	}
-	updated := record.Notification
-	updated.Actions = []domain.NotificationAction{muteAction(muted)}
+	state := domain.PreferenceState{Muted: muted, MutedUntil: until}
 	toast := "Unmuted."
 	if muted {
 		toast = "Muted for 30 days."
 	}
-	s.logger.Info("interaction applied",
-		"action", interaction.Action,
-		"delivery_key", record.Key,
-		"actor", interaction.ActorID,
-	)
-	return domain.InteractionResult{
-		Status:       domain.InteractionApplied,
-		Notification: &updated,
-		Toast:        toast,
+	s.logger.Info("interaction applied", "action", interaction.Action, "delivery_key", record.Key, "actor", interaction.ActorID)
+	return domain.InteractionResult{Status: domain.InteractionApplied, Settings: &state, Toast: toast}
+}
+
+func (s *InteractionService) delivery(ctx context.Context, interaction domain.Interaction) (*ports.RecordedDelivery, domain.InteractionResult, bool) {
+	record, err := s.store.DeliveryByMessageID(ctx, interaction.MessageID)
+	if err != nil {
+		s.logger.Error("interaction delivery lookup failed", "error", err)
+		return nil, domain.InteractionResult{Status: domain.InteractionRejected, Toast: "This alert could not be loaded."}, false
 	}
+	if record == nil {
+		return nil, domain.InteractionResult{Status: domain.InteractionRejected, Toast: "This alert can no longer be updated."}, false
+	}
+	return record, domain.InteractionResult{}, true
 }

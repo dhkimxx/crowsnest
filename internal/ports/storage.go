@@ -43,6 +43,7 @@ type UnresolvedStore interface {
 type PreferenceStore interface {
 	Enabled(context.Context, domain.RecipientAddress, domain.EventKind, string, string) (bool, error)
 	SetMute(context.Context, domain.RecipientAddress, *time.Time) error
+	MuteState(context.Context, domain.RecipientAddress) (domain.PreferenceState, error)
 }
 
 type PipelineStateStore interface {

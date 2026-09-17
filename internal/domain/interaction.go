@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 const (
 	InteractionApplied   = "applied"
 	InteractionDuplicate = "duplicate"
@@ -15,8 +17,14 @@ type Interaction struct {
 	Value     map[string]string
 }
 
+type PreferenceState struct {
+	Muted      bool       `json:"muted"`
+	MutedUntil *time.Time `json:"muted_until,omitempty"`
+}
+
 type InteractionResult struct {
 	Status       string
 	Notification *Notification
+	Settings     *PreferenceState
 	Toast        string
 }
