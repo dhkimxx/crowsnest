@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/dhkimxx/crowsnest/internal/domain"
 	"github.com/dhkimxx/crowsnest/internal/ports"
@@ -35,7 +34,7 @@ func (s *Store) SetReasonEnabled(ctx context.Context, address domain.RecipientAd
 	if !ok {
 		return fmt.Errorf("unsupported preference reason %q", reasonCode)
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := nowTimestamp()
 	_, err := s.db.ExecContext(ctx, fmt.Sprintf(`
 		INSERT INTO notification_preferences(email, %[1]s, updated_at) VALUES(?, ?, ?)
 		ON CONFLICT(email) DO UPDATE SET %[1]s = excluded.%[1]s, updated_at = excluded.updated_at`, column),
@@ -50,7 +49,7 @@ func (s *Store) BeginInteraction(ctx context.Context, record ports.InteractionRe
 	if record.EventID == "" {
 		return false, errors.New("interaction event id is required")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := nowTimestamp()
 	result, err := s.db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO interaction_events(
 			event_id, message_id, actor_id, action, result, created_at, updated_at
@@ -72,7 +71,7 @@ func (s *Store) FinishInteraction(ctx context.Context, eventID, result string) e
 	}
 	if _, err := s.db.ExecContext(ctx, `
 		UPDATE interaction_events SET result = ?, updated_at = ? WHERE event_id = ?`,
-		result, time.Now().UTC().Format(time.RFC3339Nano), eventID); err != nil {
+		result, nowTimestamp(), eventID); err != nil {
 		return fmt.Errorf("finish interaction: %w", err)
 	}
 	return nil

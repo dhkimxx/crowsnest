@@ -221,14 +221,20 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "deliveries", "retryable", "INTEGER NOT NULL DEFAULT 1"); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+	if err := s.normalizeTimestamps(ctx); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)`, nowTimestamp()); err != nil {
 		return fmt.Errorf("record SQLite migration: %w", err)
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (2, ?)`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (2, ?)`, nowTimestamp()); err != nil {
 		return fmt.Errorf("record SQLite retryable migration: %w", err)
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (3, ?)`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (3, ?)`, nowTimestamp()); err != nil {
 		return fmt.Errorf("record SQLite interaction migration: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (4, ?)`, nowTimestamp()); err != nil {
+		return fmt.Errorf("record SQLite timestamp migration: %w", err)
 	}
 	return nil
 }
@@ -273,7 +279,7 @@ func (s *Store) RecordIgnored(ctx context.Context, eventKey, sourceVersion, sour
 	if eventKey == "" {
 		return errors.New("event key is required")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := nowTimestamp()
 	_, err := s.db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO events(
 			event_key, source, source_version, source_event, kind, action, status,
@@ -318,9 +324,9 @@ func (s *Store) enqueue(ctx context.Context, event domain.CanonicalEvent, delive
 		event.Action,
 		eventJSON,
 		event.Project.ID,
-		event.ReceivedAt.UTC().Format(time.RFC3339Nano),
+		formatTimestamp(event.ReceivedAt),
 		formatOptionalTime(event.OccurredAt),
-		now.Format(time.RFC3339Nano),
+		formatTimestamp(now),
 	)
 	if err != nil {
 		return fmt.Errorf("insert event: %w", err)
@@ -342,9 +348,9 @@ func (s *Store) enqueue(ctx context.Context, event domain.CanonicalEvent, delive
 			delivery.Key,
 			event.EventKey,
 			notificationJSON,
-			now.Format(time.RFC3339Nano),
-			now.Format(time.RFC3339Nano),
-			now.Format(time.RFC3339Nano),
+			formatTimestamp(now),
+			formatTimestamp(now),
+			formatTimestamp(now),
 		)
 		if err != nil {
 			return fmt.Errorf("insert delivery %s: %w", delivery.Key, err)
@@ -363,7 +369,7 @@ func (s *Store) enqueue(ctx context.Context, event domain.CanonicalEvent, delive
 			INSERT INTO pipeline_states(correlation_key, status, recipients_json, updated_at)
 			VALUES (?, ?, ?, ?)
 			ON CONFLICT(correlation_key) DO UPDATE SET status = excluded.status, recipients_json = excluded.recipients_json, updated_at = excluded.updated_at`,
-			state.CorrelationKey, state.Status, recipientsJSON, updatedAt.UTC().Format(time.RFC3339Nano))
+			state.CorrelationKey, state.Status, recipientsJSON, formatTimestamp(updatedAt))
 		if err != nil {
 			return fmt.Errorf("write pipeline state in enqueue transaction: %w", err)
 		}
@@ -396,7 +402,7 @@ func (s *Store) Claim(ctx context.Context, workerID string, limit int) ([]domain
 		)
 		ORDER BY next_attempt_at, created_at
 		LIMIT ?`,
-		now.Format(time.RFC3339Nano), s.config.MaxAttempts, now.Format(time.RFC3339Nano), s.config.MaxAttempts, now.Format(time.RFC3339Nano), s.config.MaxAttempts, limit)
+		formatTimestamp(now), s.config.MaxAttempts, formatTimestamp(now), s.config.MaxAttempts, formatTimestamp(now), s.config.MaxAttempts, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query outbox: %w", err)
 	}
@@ -428,8 +434,8 @@ func (s *Store) Claim(ctx context.Context, workerID string, limit int) ([]domain
 				OR (status = 'failed' AND retryable = 1 AND next_attempt_at <= ? AND attempts < ?)
 				OR (status = 'processing' AND lease_until IS NOT NULL AND lease_until <= ? AND attempts < ?)
 			)`,
-			leaseUntil.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), item.key,
-			now.Format(time.RFC3339Nano), s.config.MaxAttempts, now.Format(time.RFC3339Nano), s.config.MaxAttempts, now.Format(time.RFC3339Nano), s.config.MaxAttempts)
+			formatTimestamp(leaseUntil), formatTimestamp(now), item.key,
+			formatTimestamp(now), s.config.MaxAttempts, formatTimestamp(now), s.config.MaxAttempts, formatTimestamp(now), s.config.MaxAttempts)
 		if updateErr != nil {
 			return nil, fmt.Errorf("claim delivery %s: %w", item.key, updateErr)
 		}
@@ -453,7 +459,7 @@ func (s *Store) MarkDelivered(ctx context.Context, key string, receipt domain.De
 	if key == "" {
 		return errors.New("delivery key is required")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := nowTimestamp()
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE deliveries
 		SET status = 'delivered', lease_until = NULL, provider_message_id = ?,
@@ -496,7 +502,7 @@ func (s *Store) MarkFailed(ctx context.Context, key string, failure domain.Deliv
 		SET status = ?, retryable = ?, next_attempt_at = ?, lease_until = NULL,
 			last_error_class = ?, last_error_message = ?, updated_at = ?
 		WHERE delivery_key = ?`,
-		status, boolInt(failure.Retryable && attempts < s.config.MaxAttempts), nextAttempt.Format(time.RFC3339Nano), failure.Class, truncateError(failure.Message), now.Format(time.RFC3339Nano), key)
+		status, boolInt(failure.Retryable && attempts < s.config.MaxAttempts), formatTimestamp(nextAttempt), failure.Class, truncateError(failure.Message), formatTimestamp(now), key)
 	if err != nil {
 		return fmt.Errorf("mark delivery failed: %w", err)
 	}
@@ -556,7 +562,7 @@ func (s *Store) Upsert(ctx context.Context, provider domain.Provider, identity d
 	}
 	identity.Email = usableEmail(identity.Email)
 	identity.Username = strings.ToLower(strings.TrimSpace(identity.Username))
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := nowTimestamp()
 	var idByProviderID, idByUsername sql.NullInt64
 	var usernameProviderID string
 	if identity.ProviderID != "" {
@@ -596,7 +602,7 @@ func (s *Store) Upsert(ctx context.Context, provider domain.Provider, identity d
 }
 
 func (s *Store) DisableExcept(ctx context.Context, provider domain.Provider, enabledProviderIDs []string) (int, error) {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := nowTimestamp()
 	query := `UPDATE identities SET enabled = 0, updated_at = ? WHERE provider = ?`
 	args := []any{now, provider}
 	if len(enabledProviderIDs) > 0 {
@@ -623,7 +629,7 @@ func (s *Store) UpsertPreference(ctx context.Context, preference Preference) err
 	if email == "" {
 		return errors.New("a usable preference email is required")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := nowTimestamp()
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO notification_preferences(
 			email, enabled, ci_failed, ci_recovered, mr_review_requested, mr_assigned,
@@ -673,7 +679,7 @@ func (s *Store) Record(ctx context.Context, eventKey string, identities []domain
 	if eventKey == "" {
 		return errors.New("event key is required")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := nowTimestamp()
 	for _, identity := range identities {
 		provider := identity.Provider
 		if provider == "" {
@@ -750,7 +756,7 @@ func (s *Store) Put(ctx context.Context, state domain.PipelineState) error {
 		INSERT INTO pipeline_states(correlation_key, status, recipients_json, updated_at)
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(correlation_key) DO UPDATE SET status = excluded.status, recipients_json = excluded.recipients_json, updated_at = excluded.updated_at`,
-		state.CorrelationKey, state.Status, recipientsJSON, state.UpdatedAt.UTC().Format(time.RFC3339Nano))
+		state.CorrelationKey, state.Status, recipientsJSON, formatTimestamp(state.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("write pipeline state: %w", err)
 	}
@@ -813,7 +819,7 @@ func formatOptionalTime(value *time.Time) any {
 	if value == nil {
 		return nil
 	}
-	return value.UTC().Format(time.RFC3339Nano)
+	return formatTimestamp(*value)
 }
 
 func boolInt(value bool) int {

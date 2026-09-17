@@ -332,3 +332,127 @@ func TestStoreInteractionPreferencesAndMessageLookup(t *testing.T) {
 		t.Fatalf("interaction result = %q", result)
 	}
 }
+
+func TestStoreNormalizesLegacyTimestamps(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	if _, err := store.db.ExecContext(ctx, `
+		INSERT INTO events(event_key, source, source_version, source_event, kind, action, status, event_json, received_at, occurred_at, created_at)
+		VALUES ('event-legacy', 'gitlab', '17.6', 'Pipeline Hook', 'pipeline', 'failed', 'accepted', '{}', ?, ?, ?)`,
+		"2026-09-17T06:01:05.123456789Z",
+		"2026-09-17T06:00:00Z",
+		"2026-09-17T06:01:05.123456789Z",
+	); err != nil {
+		t.Fatalf("insert legacy event: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `
+		INSERT INTO deliveries(
+			delivery_key, event_key, status, notification_json, attempts,
+			next_attempt_at, created_at, updated_at, delivered_at
+		) VALUES ('legacy-1', 'event-legacy', 'pending', '{}', 0, ?, ?, ?, ?)`,
+		"2026-09-17T06:01:05.123456789Z",
+		"2026-09-17T06:01:05Z",
+		"2026-09-17T06:01:05.987654321Z",
+		"2026-09-17T06:01:06.1Z",
+	); err != nil {
+		t.Fatalf("insert legacy delivery: %v", err)
+	}
+	if err := store.normalizeTimestamps(ctx); err != nil {
+		t.Fatalf("normalizeTimestamps() error = %v", err)
+	}
+	var nextAttempt, created, updated, delivered string
+	if err := store.db.QueryRowContext(ctx, `
+		SELECT next_attempt_at, created_at, updated_at, delivered_at FROM deliveries WHERE delivery_key = 'legacy-1'`,
+	).Scan(&nextAttempt, &created, &updated, &delivered); err != nil {
+		t.Fatalf("query normalized delivery: %v", err)
+	}
+	expected := map[string]string{
+		"next_attempt_at": "2026-09-17T06:01:05.123Z",
+		"created_at":      "2026-09-17T06:01:05.000Z",
+		"updated_at":      "2026-09-17T06:01:05.987Z",
+		"delivered_at":    "2026-09-17T06:01:06.100Z",
+	}
+	got := map[string]string{
+		"next_attempt_at": nextAttempt,
+		"created_at":      created,
+		"updated_at":      updated,
+		"delivered_at":    delivered,
+	}
+	for column, want := range expected {
+		if got[column] != want {
+			t.Fatalf("%s = %q, want %q", column, got[column], want)
+		}
+	}
+	if err := store.normalizeTimestamps(ctx); err != nil {
+		t.Fatalf("second normalizeTimestamps() error = %v", err)
+	}
+	var again string
+	if err := store.db.QueryRowContext(ctx, `SELECT next_attempt_at FROM deliveries WHERE delivery_key = 'legacy-1'`).Scan(&again); err != nil {
+		t.Fatalf("requery normalized delivery: %v", err)
+	}
+	if again != expected["next_attempt_at"] {
+		t.Fatalf("normalize is not idempotent: %q", again)
+	}
+}
+
+func TestStoreWritesFixedWidthTimestamps(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	event := testEvent("event-timestamp")
+	delivery := domain.Delivery{
+		Key: "delivery-timestamp",
+		Notification: domain.Notification{
+			EventKey:  event.EventKey,
+			Kind:      domain.EventKindPipeline,
+			Action:    "failed",
+			Recipient: domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "user@example.com"},
+		},
+	}
+	if err := store.Enqueue(ctx, event, []domain.Delivery{delivery}); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+	var nextAttempt, created string
+	if err := store.db.QueryRowContext(ctx, `
+		SELECT next_attempt_at, created_at FROM deliveries WHERE delivery_key = ?`, delivery.Key,
+	).Scan(&nextAttempt, &created); err != nil {
+		t.Fatalf("query delivery timestamps: %v", err)
+	}
+	for name, value := range map[string]string{"next_attempt_at": nextAttempt, "created_at": created} {
+		if len(value) != len("2006-01-02T15:04:05.000Z") || value[23] != 'Z' {
+			t.Fatalf("%s = %q is not a fixed-width UTC timestamp", name, value)
+		}
+	}
+	claimed, err := store.Claim(ctx, "worker-1", 10)
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if len(claimed) != 1 {
+		t.Fatalf("claimed = %#v", claimed)
+	}
+}
+
+func TestStoreNormalizesLegacyEventTimestamps(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	if _, err := store.db.ExecContext(ctx, `
+		INSERT INTO events(event_key, source, source_version, source_event, kind, action, status, event_json, received_at, occurred_at, created_at)
+		VALUES ('event-legacy-only', 'gitlab', '17.6', 'Pipeline Hook', 'pipeline', 'failed', 'accepted', '{}', ?, ?, ?)`,
+		"2026-09-17T06:01:05.123456789Z",
+		"2026-09-17T06:00:00.5Z",
+		"2026-09-17T06:01:05.123456789Z",
+	); err != nil {
+		t.Fatalf("insert legacy event: %v", err)
+	}
+	if err := store.normalizeTimestamps(ctx); err != nil {
+		t.Fatalf("normalizeTimestamps() error = %v", err)
+	}
+	var received, occurred, created string
+	if err := store.db.QueryRowContext(ctx, `
+		SELECT received_at, occurred_at, created_at FROM events WHERE event_key = 'event-legacy-only'`,
+	).Scan(&received, &occurred, &created); err != nil {
+		t.Fatalf("query normalized event: %v", err)
+	}
+	if received != "2026-09-17T06:01:05.123Z" || occurred != "2026-09-17T06:00:00.500Z" || created != "2026-09-17T06:01:05.123Z" {
+		t.Fatalf("normalized event timestamps = %q %q %q", received, occurred, created)
+	}
+}
