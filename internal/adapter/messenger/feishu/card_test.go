@@ -19,7 +19,7 @@ func TestRenderCardUsesReadableLabelsAndContextualButton(t *testing.T) {
 			"Branch":  "feature/api → main",
 			"Status":  "Updated",
 		},
-		Reasons: []domain.NotificationReason{{Code: "mr_updated", Text: "Merge Request가 변경되었습니다."}},
+		Reasons: []domain.NotificationReason{{Code: "mr_updated", Text: "The merge request was updated."}},
 	})
 	if err != nil {
 		t.Fatalf("RenderCard() error = %v", err)

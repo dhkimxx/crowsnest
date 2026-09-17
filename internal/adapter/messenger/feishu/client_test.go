@@ -59,7 +59,7 @@ func TestClientSendsInteractiveEmailMessage(t *testing.T) {
 		EventKey:  "event-1",
 		Kind:      domain.EventKindPipeline,
 		Action:    "failed",
-		Title:     "Pipeline 실패",
+		Title:     "Pipeline failed",
 		Summary:   "group/project · failed",
 		URL:       "https://gitlab.example/group/project/-/pipelines/1",
 		Recipient: domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "carol@example.com"},
@@ -97,7 +97,7 @@ func TestClientRefreshesTokenOnceAfterAuthenticationError(t *testing.T) {
 	_, err = client.Send(context.Background(), domain.Notification{
 		Kind:      domain.EventKindNote,
 		Action:    "create",
-		Title:     "댓글",
+		Title:     "New comment",
 		Summary:   "comment",
 		Recipient: domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "user@example.com"},
 	})
