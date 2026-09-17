@@ -1,17 +1,17 @@
-# Crowsnest 가정과 제한
+# Crowsnest Assumptions and Limits
 
-- 현재 목표 GitLab 버전은 Self-Managed 17.6이다.
-- System Hook은 Merge Request와 lifecycle 감지에 사용하고, Pipeline·Note·Issue는 Project Hook으로 보완한다.
-- 전체 Project Hook 자동 관리는 GitLab Administrator API Token이 필요하다.
-- System Hook과 Project Hook은 하나의 Crowsnest Webhook URL을 공유한다.
-- Push·Tag·Job·Deployment·Wiki·Confidential 이벤트는 기본적으로 알림 대상이 아니다.
-- Pipeline 실패 수신자는 우선 HEAD commit author email을 사용한다. Pipeline 실행 사용자와 commit author는 동일하다고 가정하지 않는다.
-- 이메일이 `[REDACTED]`이거나 없으면 GitLab user ID/username 매핑을 사용한다.
-- Feishu 수신자는 이메일 직접 전송을 우선한다. Contact API email→open_id 조회는 기본 경로가 아니다.
-- 사용자 매핑과 preference가 없는 사용자는 안전하게 전송하지 않는다.
-- Webhook 이벤트와 수신자별 delivery는 SQLite Outbox에 저장한 뒤 성공 응답한다.
-- SQLite는 단일 호스트·단일 프로세스 운영을 기준으로 한다. 고가용성이나 다중 replica가 필요하면 PostgreSQL Adapter를 추가해야 한다.
-- Feishu 전송 dry-run과 GitLab Hook Reconciler dry-run은 서로 독립된 설정으로 제어한다.
-- LLM은 이번 버전에 포함하지 않으며, 이후 비동기 enrichment 기능으로만 추가한다.
-- GitLab 승인·댓글·라벨 변경 등 외부 상태 변경은 Crowsnest 알림 경로에서 수행하지 않는다.
-- GitLab의 실제 운영 Payload는 로컬 fixture와 다를 수 있으므로, 운영 전 Webhook test 결과를 별도로 검증해야 한다.
+- The current GitLab target version is Self-Managed 17.6.
+- System Hook is used for merge requests and lifecycle detection; Pipeline, Note, and Issue events are covered by Project Hooks.
+- Managing project hooks across the instance requires a GitLab Administrator API token.
+- System Hook and Project Hook share a single Crowsnest webhook URL.
+- Push, Tag, Job, Deployment, Wiki, and Confidential events are not notified by default.
+- Pipeline failure recipients prefer the HEAD commit author email. The pipeline user and the commit author are not assumed to be the same person.
+- When the email is `[REDACTED]` or missing, the GitLab user ID/username mapping is used.
+- Feishu recipients prefer direct email delivery. Contact API email→open_id lookup is not part of the default path.
+- Users without a mapping or preference configuration are safely not notified.
+- Webhook events and per-recipient deliveries are stored in a SQLite outbox before the webhook returns success.
+- SQLite assumes a single host and a single process. If high availability or multiple replicas are needed, a PostgreSQL adapter must be added.
+- Feishu delivery dry-run and GitLab hook reconciler dry-run are controlled by independent settings.
+- The LLM is not part of this version and will only be added later as an asynchronous enrichment feature.
+- Crowsnest never performs external state changes such as GitLab approvals, comments, or label changes on the notification path.
+- Real production GitLab payloads may differ from local fixtures; verify webhook test results separately before going live.

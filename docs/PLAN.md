@@ -1,128 +1,130 @@
-# Crowsnest 구현 계획
+# Crowsnest Implementation Plan
 
-상태: 초기 구현 진행 중
+Status: initial implementation in progress
 
-## 목표
+## Goal
 
-GitLab 인스턴스의 이벤트를 개인별 실행 알림으로 변환해 Feishu Self-Built App Bot 개인 DM으로 전달한다. 단독 Go 서비스로 운영하며, 향후 LLM 분석을 추가할 수 있는 경계를 둔다.
+Convert GitLab instance events into per-person actionable notifications and deliver them as Feishu Self-Built App Bot direct messages. Run as a standalone Go service, with boundaries that allow adding LLM analysis later.
 
-## 합의된 기본값
+## Agreed defaults
 
-- 언어: Go
-- 배포: Docker Compose
-- Crowsnest 외부 포트: `5680`
-- 저장소: 초기 SQLite
-- 입력 URL: 하나의 `/webhook/gitlab` 엔드포인트
-- GitLab 입력: 글로벌 System Hook + API로 자동 관리하는 Project Hook
-- Feishu: 공식 HTTP API, `receive_id_type=email`, 개인 DM
-- 초기 실행: dry-run 우선
-- LLM: 이번 버전은 호출하지 않고 확장 인터페이스만 준비
-- GitLab 변경: 알림 경로에서 승인·댓글·라벨 변경 등을 수행하지 않음
-- 기존 외부 자동화: 수정하지 않음
+- Language: Go
+- Deployment: Docker Compose
+- Crowsnest external port: `5680`
+- Storage: SQLite initially
+- Input URL: a single `/webhook/gitlab` endpoint
+- GitLab input: global System Hook plus Project Hooks managed automatically through the API
+- Feishu: official HTTP API, `receive_id_type=email`, personal DMs
+- Initial run: dry-run first
+- LLM: not called in this version; only the extension interface is prepared
+- GitLab mutations: no approvals, comments, or label changes on the notification path
+- Existing external automation: left untouched
 
-## 구현 범위
+## Scope
 
-### 1. Go 서비스 기반
+### 1. Go service foundation
 
 - Go module
-- `net/http` 기반 HTTP 서버
-- `log/slog` 기반 구조화 로그
+- `net/http` based HTTP server
+- `log/slog` structured logging
 - `/healthz`, `/readyz`
-- 환경변수 및 Secret 파일 설정
-- Dockerfile과 별도 Compose 스택
-- SQLite 연결 및 migration 구조
+- Environment variable and secret file configuration
+- Dockerfile and a separate Compose stack
+- SQLite connection and migration structure
 
-### 2. GitLab 이벤트 수신
+### 2. GitLab event intake
 
-- `X-Gitlab-Token` 검증
-- System Hook, Merge Request Hook, Pipeline Hook, Note Hook, Issue Hook 수신
-- header와 body를 공통 내부 이벤트 모델로 정규화
-- 지원하지 않는 이벤트는 `ignored` 상태로 처리
-- 전체 원문 payload와 인증 헤더를 로그에 남기지 않음
+- `X-Gitlab-Token` verification
+- System Hook, Merge Request Hook, Pipeline Hook, Note Hook, and Issue Hook intake
+- Normalize headers and bodies into the common internal event model
+- Unsupported events are recorded with `ignored` status
+- Full raw payloads and authorization headers are never logged
 
 ### 3. Hook Reconciler
 
-- 글로벌 System Hook 확인·생성·수정
-- 전체 프로젝트 pagination 조회
-- Crowsnest가 관리하는 Project Hook만 생성·수정
-- Pipeline, Note/Comment, Issue 이벤트만 Project Hook에서 활성화
-- 신규 프로젝트 자동 감지
-- dry-run 및 once 실행 지원
-- 주기 실행, rate limit, retry, race condition 대응
-- 다른 시스템의 Hook은 삭제하거나 수정하지 않음
+- Inspect, create, and update the global System Hook
+- Paginate through all projects
+- Create and update only the Project Hooks owned by Crowsnest
+- Enable only Pipeline, Note/Comment, and Issue events on Project Hooks
+- Detect newly created projects automatically
+- Support dry-run and once execution
+- Handle periodic runs, rate limits, retries, and race conditions
+- Never delete or modify hooks owned by other systems
 
-### 4. 결정론적 개인화 라우팅
+### 4. Deterministic personalized routing
 
-- Pipeline 실패 및 명확한 복구 알림
-- MR Reviewer·Assignee 지정
-- MR의 의미 있는 변경
-- 다른 사용자의 MR 댓글
-- Issue 댓글 및 담당자 변경
-- `@username` 멘션
-- GitLab user ID/username에서 사내 이메일로 매핑
-- GitLab Administrator API 기반 사용자 매핑 동기화와 선택적 Feishu Contact 검증
-- 자기 알림 억제
-- 여러 수신 이유를 한 DM으로 병합
-- 사용자별 알림 설정 적용
+- Pipeline failure and clear recovery notifications
+- MR reviewer and assignee assignments
+- Meaningful merge request updates
+- Comments from other users on a merge request
+- Issue comments and assignee changes
+- `@username` mentions
+- Map GitLab user ID/username to company email
+- User mapping sync through the GitLab Administrator API with optional Feishu Contact verification
+- Suppress self-notifications
+- Merge multiple notification reasons into one DM
+- Apply per-user notification preferences
 
-### 5. Feishu 전송
+### 5. Feishu delivery
 
-- tenant access token 발급 및 만료 안전 여유를 둔 cache
-- 이메일 기반 개인 DM
-- interactive card
-- HTTP status와 Feishu application code 동시 검사
-- 인증 오류, 권한 오류, 수신자 오류, rate limit, 일시적 오류 구분
-- 제한적 재시도와 token 만료 1회 재시도
-- Secret과 token을 로그·fixture·문서에 저장하지 않음
+- Tenant access token issuance and caching with an expiry safety margin
+- Email-based personal DMs
+- Interactive cards
+- Check both HTTP status and Feishu application codes
+- Distinguish authentication, permission, recipient, rate limit, and transient errors
+- Limited retries and a single retry on token expiry
+- Never store secrets and tokens in logs, fixtures, or documentation
 
-### 6. 전달 상태와 복구
+### 6. Delivery state and recovery
 
-- `pending`, `delivered`, `failed` 상태
-- 이벤트 단위와 수신자 단위 전달 상태 분리
-- 수신자별 delivery key
-- 성공 수신자 재전송 방지
-- 실패 수신자만 재시도
-- 서버 재시작 후 pending/failed 복구
-- SQLite 기반 실용적 at-least-once 전달
+- `pending`, `delivered`, and `failed` states
+- Separate event-level and recipient-level delivery state
+- Per-recipient delivery keys
+- No resend to recipients that already succeeded
+- Retry only failed recipients
+- Recover pending/failed deliveries after restart
+- Practical at-least-once delivery on SQLite
 
-### 7. 테스트·운영 문서
+### 7. Test and operations documentation
 
-- GitLab 17.6 비밀 없는 fixture
-- Pipeline, MR, Note, Issue, 멘션, 중복, 복구, 오류 시나리오
-- Feishu mock server 기반 dry-run 테스트
-- GitLab 사용자 목록·Feishu 이메일 조회·매핑 동기화 테스트
-- 실제 메시지 발송 전 설정 검증
-- Compose 운영 문서, Secret 주입 방법, SQLite 백업 방법
-- GitLab Hook 등록·재조정·네트워크 접근 검증 절차
+- Secret-free GitLab 17.6 fixtures
+- Pipeline, MR, Note, Issue, mention, duplicate, recovery, and error scenarios
+- Dry-run tests against a Feishu mock server
+- Tests for GitLab user listing, Feishu email lookup, and mapping sync
+- Configuration checks before sending real messages
+- Compose operations, secret injection, and SQLite backup guidance
+- Procedures for GitLab hook registration, reconciliation, and network reachability
 
-## 이번 버전 제외
+## Out of scope for this version
 
-- LLM 요약·위험도·권장 조치 실행
-- Feishu 카드 양방향 버튼과 승인 액션
-- GitLab MR 승인·댓글·라벨 변경
-- 사용자 설정 UI와 slash command
-- 모든 GitLab 이벤트 지원
-- Confidential 이벤트 기본 전송
-- 기존 이벤트 수신 경로 편입
-- 운영 환경의 실제 Hook 활성화 및 외부 시스템 변경
+- LLM summaries, risk scoring, or suggested actions
+- Two-way Feishu card buttons and approval actions
+- GitLab MR approvals, comments, or label changes
+- User preference UI and slash commands
+- Support for every GitLab event
+- Default delivery of confidential events
+- Migrating existing event intake paths
+- Activating real hooks or changing external systems in production
 
-## 향후 LLM 확장 경계
+## Future LLM boundary
 
-정규화된 이벤트를 입력으로 받아 요약·영향·권장 조치·근거 링크를 구조화해 반환하는 `AIEnricher` 경계를 준비한다. LLM은 수신자 판정, Webhook 인증, 중복 제거, 전달 성공 여부를 결정하지 않는다.
+Prepare an `AIEnricher` boundary that takes normalized events and returns structured summaries, impact, suggested actions, and evidence links. The LLM never decides recipients, webhook authentication, deduplication, or delivery success.
 
-## 아키텍처 결정 상태
+## Architecture decision status
 
-다음 방향을 합의했다. 세부 구조와 필드는 추가 논의 후 확정한다.
+The following directions are agreed. Detailed structures and fields are finalized after further discussion.
 
-- Canonical Event Model은 GitLab·GitHub·Forgejo에 공통인 업무 의미만 담는 목적 중심 수준으로 일반화한다.
-- Provider별 Payload 경로와 버전 차이는 각 Adapter의 Decoder 안에서 처리한다.
-- GitLab `v17.6` Adapter부터 구현하고, 이후 버전은 별도 Decoder 또는 호환 계층으로 확장한다.
-- Crowsnest는 단일 프로세스로 실행하며 Delivery Worker, Recovery Worker, Hook Reconcile Scheduler를 내부 Worker로 둔다.
-- `reconcile --once`, `reconcile --dry-run`은 수동 운영 명령으로 제공하되 상시 별도 프로세스로 운영하지 않는다.
-- Webhook 이벤트와 수신자별 delivery는 SQLite에 저장한 뒤 성공 응답한다.
-- Feishu 전송은 영속 Outbox Worker가 담당한다.
+- The canonical event model is generalized to the business meanings shared by GitLab, GitHub, and Forgejo.
+- Provider-specific payload paths and version differences are handled inside each adapter's decoder.
+- Implement the GitLab `v17.6` adapter first; later versions extend through separate decoders or a compatibility layer.
+- Crowsnest runs as a single process with delivery, recovery, and hook reconcile schedulers as internal workers.
+- `reconcile --once` and `reconcile --dry-run` are manual operations, not long-running separate processes.
+- Webhook events and per-recipient deliveries are stored in SQLite before the webhook returns success.
+- A persistent outbox worker performs Feishu delivery.
 
-- GitLab API Token의 보관 위치와 권한 범위
-- 사설 IP 접근 및 HTTPS/reverse proxy 구성
-- SQLite driver와 migration 도구 선택
-- Canonical Event의 최종 필드와 provider-specific metadata 범위
+Open items:
+
+- Where to store the GitLab API token and its permission scope
+- Private network access and HTTPS/reverse proxy setup
+- SQLite driver and migration tooling
+- Final canonical event fields and the provider-specific metadata range
