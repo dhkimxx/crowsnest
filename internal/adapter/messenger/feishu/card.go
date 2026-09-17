@@ -91,22 +91,19 @@ func RenderCard(notification domain.Notification) ([]byte, error) {
 			})
 		}
 	}
+	actions := make([]any, 0, 1+len(notification.Actions))
 	if validURL(notification.URL) {
-		elements = append(elements, map[string]any{"tag": "hr"})
-		elements = append(elements, map[string]any{
-			"tag": "action",
-			"actions": []any{
-				map[string]any{
-					"tag":  "button",
-					"type": "primary",
-					"text": map[string]any{"tag": "plain_text", "content": openButtonLabel(notification)},
-					"url":  notification.URL,
-				},
-			},
+		actions = append(actions, map[string]any{
+			"tag":  "button",
+			"type": "primary",
+			"text": map[string]any{"tag": "plain_text", "content": openButtonLabel(notification)},
+			"url":  notification.URL,
 		})
 	}
-	if len(notification.Actions) > 0 {
-		elements = append(elements, map[string]any{"tag": "action", "actions": actionButtons(notification.Actions)})
+	actions = append(actions, actionButtons(notification.Actions)...)
+	if len(actions) > 0 {
+		elements = append(elements, map[string]any{"tag": "hr"})
+		elements = append(elements, map[string]any{"tag": "action", "actions": actions})
 	}
 	card := map[string]any{
 		"config": map[string]any{"wide_screen_mode": true, "update_multi": true},
