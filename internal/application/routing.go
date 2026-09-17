@@ -148,7 +148,7 @@ func (r *Router) routePipeline(ctx context.Context, candidates *candidateSet, ev
 		if !resolvableIdentity(identity) {
 			identity = event.Actor
 		}
-		candidates.add(identity, ReasonCIFailed, "작성한 Commit의 Pipeline이 실패했습니다.", true)
+		candidates.add(identity, ReasonCIFailed, "The pipeline for your commit failed.", true)
 	case "success":
 		if r.pipelineStates == nil {
 			return nil
@@ -161,7 +161,7 @@ func (r *Router) routePipeline(ctx context.Context, candidates *candidateSet, ev
 			return nil
 		}
 		for _, recipient := range state.Recipients {
-			candidates.addAddress(recipient, ReasonCIRecovered, "실패했던 Pipeline이 복구되었습니다.", true)
+			candidates.addAddress(recipient, ReasonCIRecovered, "The pipeline that failed has recovered.", true)
 		}
 	}
 	return nil
@@ -175,36 +175,36 @@ func (r *Router) routeMergeRequest(candidates *candidateSet, event domain.Canoni
 	switch event.Action {
 	case "open":
 		for _, reviewer := range mergeRequest.Reviewers {
-			candidates.add(reviewer, ReasonMRReviewRequested, "Reviewer로 지정되었습니다.", false)
+			candidates.add(reviewer, ReasonMRReviewRequested, "You were assigned as a reviewer.", false)
 		}
 		for _, assignee := range mergeRequest.Assignees {
-			candidates.add(assignee, ReasonMRAssigned, "Merge Request의 Assignee로 지정되었습니다.", false)
+			candidates.add(assignee, ReasonMRAssigned, "You were assigned to a merge request.", false)
 		}
 	case "update":
 		for _, change := range event.Changes {
 			switch change.Field {
 			case "reviewers":
 				for _, reviewer := range change.Added {
-					candidates.add(reviewer, ReasonMRReviewRequested, "Reviewer로 지정되었습니다.", false)
+					candidates.add(reviewer, ReasonMRReviewRequested, "You were assigned as a reviewer.", false)
 				}
 			case "assignees":
 				for _, assignee := range change.Added {
-					candidates.add(assignee, ReasonMRAssigned, "Merge Request의 Assignee로 지정되었습니다.", false)
+					candidates.add(assignee, ReasonMRAssigned, "You were assigned to a merge request.", false)
 				}
 			case "title", "description", "source_branch", "target_branch", "draft":
 				if hasIdentity(mergeRequest.Author) {
-					candidates.add(mergeRequest.Author, ReasonMRUpdated, "Merge Request가 변경되었습니다.", false)
+					candidates.add(mergeRequest.Author, ReasonMRUpdated, "The merge request was updated.", false)
 				}
 				if change.Field == "draft" || change.Field == "target_branch" {
 					for _, reviewer := range mergeRequest.Reviewers {
-						candidates.add(reviewer, ReasonMRStateChanged, "검토 중인 Merge Request의 상태가 변경되었습니다.", false)
+						candidates.add(reviewer, ReasonMRStateChanged, "A merge request under review changed state.", false)
 					}
 				}
 			}
 		}
 	case "approved", "approval", "unapproved", "unapproval":
 		if hasIdentity(mergeRequest.Author) {
-			candidates.add(mergeRequest.Author, ReasonMRApproved, "Merge Request의 Approval 상태가 변경되었습니다.", false)
+			candidates.add(mergeRequest.Author, ReasonMRApproved, "The merge request approval status changed.", false)
 		}
 	case "merge", "close", "reopen":
 		if hasIdentity(mergeRequest.Author) {
@@ -212,7 +212,7 @@ func (r *Router) routeMergeRequest(candidates *candidateSet, event domain.Canoni
 		}
 	}
 	for _, mention := range event.Mentions {
-		candidates.add(mention, ReasonMention, "Merge Request에서 Mention되었습니다.", false)
+		candidates.add(mention, ReasonMention, "You were mentioned in a merge request.", false)
 	}
 }
 
@@ -225,16 +225,16 @@ func (r *Router) routeNote(candidates *candidateSet, event domain.CanonicalEvent
 	}
 	if event.Note.MergeRequest != nil {
 		if hasIdentity(event.Note.MergeRequest.Author) && !sameIdentity(event.Actor, event.Note.MergeRequest.Author) {
-			candidates.add(event.Note.MergeRequest.Author, ReasonMRComment, "Merge Request에 새 Comment가 등록되었습니다.", false)
+			candidates.add(event.Note.MergeRequest.Author, ReasonMRComment, "A new comment was added to a merge request.", false)
 		}
 	}
 	if event.Note.Issue != nil {
 		if hasIdentity(event.Note.Issue.Author) && !sameIdentity(event.Actor, event.Note.Issue.Author) {
-			candidates.add(event.Note.Issue.Author, ReasonIssueUpdated, "Issue에 새 Comment가 등록되었습니다.", false)
+			candidates.add(event.Note.Issue.Author, ReasonIssueUpdated, "A new comment was added to an issue.", false)
 		}
 	}
 	for _, mention := range event.Mentions {
-		candidates.add(mention, ReasonMention, "Comment에서 Mention되었습니다.", false)
+		candidates.add(mention, ReasonMention, "You were mentioned in a comment.", false)
 	}
 }
 
@@ -245,23 +245,23 @@ func (r *Router) routeIssue(candidates *candidateSet, event domain.CanonicalEven
 	switch event.Action {
 	case "open":
 		for _, assignee := range event.Issue.Assignees {
-			candidates.add(assignee, ReasonIssueAssigned, "Issue의 Assignee로 지정되었습니다.", false)
+			candidates.add(assignee, ReasonIssueAssigned, "You were assigned to an issue.", false)
 		}
 	case "update":
 		for _, change := range event.Changes {
 			if change.Field == "assignees" {
 				for _, assignee := range change.Added {
-					candidates.add(assignee, ReasonIssueAssigned, "Issue의 Assignee로 지정되었습니다.", false)
+					candidates.add(assignee, ReasonIssueAssigned, "You were assigned to an issue.", false)
 				}
 			} else if change.Field == "title" || change.Field == "description" || change.Field == "state" {
 				if hasIdentity(event.Issue.Author) {
-					candidates.add(event.Issue.Author, ReasonIssueUpdated, "Issue가 변경되었습니다.", false)
+					candidates.add(event.Issue.Author, ReasonIssueUpdated, "The issue was updated.", false)
 				}
 			}
 		}
 	}
 	for _, mention := range event.Mentions {
-		candidates.add(mention, ReasonMention, "Issue에서 Mention되었습니다.", false)
+		candidates.add(mention, ReasonMention, "You were mentioned in an issue.", false)
 	}
 }
 
@@ -703,13 +703,13 @@ func notificationReasonTitle(event domain.CanonicalEvent, reasonCode string) str
 func mergeRequestStateReason(action string) string {
 	switch action {
 	case "merge":
-		return "Merge Request가 머지되었습니다."
+		return "The merge request was merged."
 	case "close":
-		return "Merge Request가 닫혔습니다."
+		return "The merge request was closed."
 	case "reopen":
-		return "Merge Request가 다시 열렸습니다."
+		return "The merge request was reopened."
 	default:
-		return "Merge Request의 상태가 변경되었습니다."
+		return "The merge request state changed."
 	}
 }
 
