@@ -43,7 +43,7 @@ docker compose --env-file .env -f deploy/compose.yaml up --build
 | `CROWSNEST_IDENTITY_SYNC_VERIFY_FEISHU` | `true`이면 Feishu Contact API로 이메일 존재 여부까지 검증. 기본 `false` |
 | `CROWSNEST_RECIPIENT_ALLOWLIST` | 비어 있으면 전체 발송, 값이 있으면 쉼표로 구분한 이메일에만 발송 |
 | `CROWSNEST_WEBHOOK_SECRET` | 수신 Webhook의 `X-Gitlab-Token` 검증값 |
-| `CROWSNEST_GITLAB_BASE_URL` | GitLab 기본 URL |
+| `CROWSNEST_GITLAB_BASE_URL` | GitLab 기본 URL. API 접근과 알림 카드 링크 정규화에 함께 사용 |
 | `CROWSNEST_GITLAB_API_TOKEN` | 전체 프로젝트 Hook을 관리하는 API Token |
 | `CROWSNEST_GITLAB_WEBHOOK_URL` | GitLab Hook이 호출할 Crowsnest URL |
 | `CROWSNEST_GITLAB_WEBHOOK_TOKEN` | 자동 생성 Hook에 넣을 Secret Token |

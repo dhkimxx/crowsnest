@@ -57,7 +57,7 @@ func serve(logger *slog.Logger) error {
 	}
 	defer store.Close()
 
-	decoder := gitlabv176.NewDecoder()
+	decoder := gitlabv176.NewDecoder(gitlabv176.WithLinkBase(settings.GitLabBaseURL))
 	registry := application.NewDecoderRegistry(decoder)
 	recipientPolicy := application.NewRecipientPolicy(settings.RecipientAllowlist)
 	router := application.NewRouterWithRecipientPolicy(store, store, store, settings.AllowedEmailDomains, recipientPolicy)

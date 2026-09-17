@@ -27,12 +27,32 @@ var (
 	inlineCode     = regexp.MustCompile("`[^`]*`")
 )
 
-type Decoder struct {
-	now func() time.Time
+type Option func(*Decoder)
+
+func WithLinkBase(base string) Option {
+	return func(d *Decoder) {
+		if !validHTTPURL(base) {
+			return
+		}
+		parsed, err := url.Parse(strings.TrimSpace(base))
+		if err != nil {
+			return
+		}
+		d.linkBase = parsed
+	}
 }
 
-func NewDecoder() Decoder {
-	return Decoder{now: time.Now}
+type Decoder struct {
+	now      func() time.Time
+	linkBase *url.URL
+}
+
+func NewDecoder(options ...Option) Decoder {
+	decoder := Decoder{now: time.Now}
+	for _, option := range options {
+		option(&decoder)
+	}
+	return decoder
 }
 
 func (Decoder) Provider() domain.Provider {
@@ -104,7 +124,55 @@ func (d Decoder) Decode(ctx context.Context, headers http.Header, body []byte) (
 	if len(event.Metadata) == 0 {
 		event.Metadata = nil
 	}
+	d.rewriteEventURLs(&event)
 	return event, nil
+}
+
+func (d Decoder) rewriteEventURLs(event *domain.CanonicalEvent) {
+	if d.linkBase == nil {
+		return
+	}
+	rewrite := d.rewriteURL
+	event.Project.URL = rewrite(event.Project.URL)
+	event.Object.URL = rewrite(event.Object.URL)
+	if event.Pipeline != nil {
+		event.Pipeline.URL = rewrite(event.Pipeline.URL)
+		event.Pipeline.CommitURL = rewrite(event.Pipeline.CommitURL)
+		if event.Pipeline.MergeRequest != nil {
+			event.Pipeline.MergeRequest.URL = rewrite(event.Pipeline.MergeRequest.URL)
+		}
+		for i := range event.Pipeline.FailedJobs {
+			event.Pipeline.FailedJobs[i].URL = rewrite(event.Pipeline.FailedJobs[i].URL)
+		}
+	}
+	if event.MergeRequest != nil {
+		event.MergeRequest.URL = rewrite(event.MergeRequest.URL)
+	}
+	if event.Issue != nil {
+		event.Issue.URL = rewrite(event.Issue.URL)
+	}
+	if event.Note != nil {
+		event.Note.URL = rewrite(event.Note.URL)
+		if event.Note.MergeRequest != nil {
+			event.Note.MergeRequest.URL = rewrite(event.Note.MergeRequest.URL)
+		}
+		if event.Note.Issue != nil {
+			event.Note.Issue.URL = rewrite(event.Note.Issue.URL)
+		}
+	}
+}
+
+func (d Decoder) rewriteURL(value string) string {
+	if value == "" || d.linkBase == nil || !validHTTPURL(value) {
+		return value
+	}
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return value
+	}
+	parsed.Scheme = d.linkBase.Scheme
+	parsed.Host = d.linkBase.Host
+	return parsed.String()
 }
 
 func eventKind(sourceEvent string, payload map[string]any) (domain.EventKind, bool) {

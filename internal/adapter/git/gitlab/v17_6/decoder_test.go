@@ -23,6 +23,56 @@ func TestDecoderSourceIdentity(t *testing.T) {
 	}
 }
 
+func TestDecoderRewritesLinkHostFromLinkBase(t *testing.T) {
+	payload := map[string]any{
+		"object_kind": "pipeline",
+		"user":        map[string]any{"id": 7, "username": "runner"},
+		"project":     map[string]any{"id": 76, "path_with_namespace": "group/project", "web_url": "http://192.168.10.208/group/project"},
+		"object_attributes": map[string]any{
+			"id": 31, "ref": "main", "status": "failed", "url": "http://192.168.10.208/group/project/-/pipelines/31",
+		},
+		"commit": map[string]any{"message": "fix", "author": map[string]any{"name": "Carol", "email": "carol@example.com"}},
+		"builds": []any{
+			map[string]any{"id": 1, "name": "test", "status": "failed", "allow_failure": false},
+		},
+	}
+	body := marshalPayload(t, payload)
+	decoder := NewDecoder(WithLinkBase("https://gitlab-backoffice.example.com"))
+	got, err := decoder.Decode(context.Background(), http.Header{"X-Gitlab-Event": []string{"Pipeline Hook"}}, body)
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if got.Project.URL != "https://gitlab-backoffice.example.com/group/project" {
+		t.Fatalf("project URL = %q", got.Project.URL)
+	}
+	if got.Object.URL != "https://gitlab-backoffice.example.com/group/project/-/pipelines/31" {
+		t.Fatalf("object URL = %q", got.Object.URL)
+	}
+	if got.Pipeline == nil || len(got.Pipeline.FailedJobs) != 1 || got.Pipeline.FailedJobs[0].URL != "https://gitlab-backoffice.example.com/group/project/-/jobs/1" {
+		t.Fatalf("pipeline = %#v", got.Pipeline)
+	}
+}
+
+func TestDecoderKeepsPayloadURLsWithoutLinkBase(t *testing.T) {
+	payload := map[string]any{
+		"object_kind": "pipeline",
+		"user":        map[string]any{"id": 7, "username": "runner"},
+		"project":     map[string]any{"id": 76, "path_with_namespace": "group/project", "web_url": "http://192.168.10.208/group/project"},
+		"object_attributes": map[string]any{
+			"id": 31, "ref": "main", "status": "failed", "url": "http://192.168.10.208/group/project/-/pipelines/31",
+		},
+		"commit": map[string]any{"message": "fix", "author": map[string]any{"name": "Carol", "email": "carol@example.com"}},
+	}
+	body := marshalPayload(t, payload)
+	got, err := NewDecoder().Decode(context.Background(), http.Header{"X-Gitlab-Event": []string{"Pipeline Hook"}}, body)
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if got.Object.URL != "http://192.168.10.208/group/project/-/pipelines/31" {
+		t.Fatalf("object URL = %q", got.Object.URL)
+	}
+}
+
 func TestDecoderPipelineProjectHook(t *testing.T) {
 	payload := map[string]any{
 		"object_kind": "pipeline",
