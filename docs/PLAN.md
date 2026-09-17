@@ -4,7 +4,7 @@ Status: initial implementation in progress
 
 ## Goal
 
-Convert GitLab instance events into per-person actionable notifications and deliver them as Feishu Self-Built App Bot direct messages. Run as a standalone Go service, with boundaries that allow adding LLM analysis later.
+Convert GitLab instance events into per-person actionable notifications and deliver them as Feishu Self-Built App Bot direct messages. Run as a standalone Go service.
 
 ## Agreed defaults
 
@@ -16,7 +16,6 @@ Convert GitLab instance events into per-person actionable notifications and deli
 - GitLab input: global System Hook plus Project Hooks managed automatically through the API
 - Feishu: official HTTP API, `receive_id_type=email`, personal DMs
 - Initial run: dry-run first
-- LLM: not called in this version; only the extension interface is prepared
 - GitLab mutations: no approvals, comments, or label changes on the notification path
 - Existing external automation: left untouched
 
@@ -97,16 +96,11 @@ Convert GitLab instance events into per-person actionable notifications and deli
 
 ## Out of scope for this version
 
-- LLM summaries, risk scoring, or suggested actions
 - GitLab MR approvals, comments, or label changes
 - Support for every GitLab event
 - Default delivery of confidential events
 - Migrating existing event intake paths
 - Activating real hooks or changing external systems in production
-
-## Future LLM boundary
-
-Prepare an `AIEnricher` boundary that takes normalized events and returns structured summaries, impact, suggested actions, and evidence links. The LLM never decides recipients, webhook authentication, deduplication, or delivery success.
 
 ## Architecture decision status
 
@@ -120,9 +114,3 @@ The following directions are agreed. Detailed structures and fields are finalize
 - Webhook events and per-recipient deliveries are stored in SQLite before the webhook returns success.
 - A persistent outbox worker performs Feishu delivery.
 
-Open items:
-
-- Where to store the GitLab API token and its permission scope
-- Private network access and HTTPS/reverse proxy setup
-- SQLite driver and migration tooling
-- Final canonical event fields and the provider-specific metadata range

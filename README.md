@@ -10,7 +10,6 @@ Self-hosted service that turns GitLab events into personalized Feishu direct mes
 - Uses the Feishu Self-Built App Bot with the official Open API, not a Custom Bot webhook.
 - Personal DMs prefer email-based delivery (`receive_id_type=email`).
 - Notification card titles carry the provider source label, for example `[GitLab] Pipeline failed`.
-- Future LLM features are asynchronous aids only (summaries, risk, suggested actions). They never decide recipients, bypass authentication, or gate delivery.
 
 ## Run locally
 
@@ -35,7 +34,7 @@ go run ./cmd/crowsnest sync-users --dry-run
 go run ./cmd/crowsnest sync-users --apply
 ```
 
-`CROWSNEST_IDENTITY_SYNC_ENABLED=true` makes the internal worker sync mappings periodically. Adding `CROWSNEST_IDENTITY_SYNC_VERIFY_FEISHU=true` additionally requires the Feishu Contact API permission. Notification preferences currently use the default policy; an admin API/UI will manage them later.
+`CROWSNEST_IDENTITY_SYNC_ENABLED=true` makes the internal worker sync mappings periodically. Adding `CROWSNEST_IDENTITY_SYNC_VERIFY_FEISHU=true` additionally requires the Feishu Contact API permission. Recipients can pause all alerts for 30 days from the card settings panel.
 
 Set `CROWSNEST_RECIPIENT_ALLOWLIST` to deliver only to specific emails; leave it empty to notify every resolved recipient.
 
@@ -51,7 +50,6 @@ Set `CROWSNEST_RECIPIENT_ALLOWLIST` to deliver only to specific emails; leave it
 - Never commit secrets, tokens, or real user mappings to Git.
 - Changing external GitLab or Feishu environments requires a separately approved task.
 - Webhook payloads and message bodies are not written to default logs.
-- Code, comments, and change descriptions sent to an LLM follow per-project policy and retention.
 
 ## License
 

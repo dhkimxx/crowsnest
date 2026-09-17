@@ -12,6 +12,5 @@
 - Webhook events and per-recipient deliveries are stored in a SQLite outbox before the webhook returns success.
 - SQLite assumes a single host and a single process. If high availability or multiple replicas are needed, a PostgreSQL adapter must be added.
 - Feishu delivery dry-run and GitLab hook reconciler dry-run are controlled by independent settings.
-- The LLM is not part of this version and will only be added later as an asynchronous enrichment feature.
 - Crowsnest never performs external state changes such as GitLab approvals, comments, or label changes on the notification path.
 - Real production GitLab payloads may differ from local fixtures; verify webhook test results separately before going live.

@@ -37,6 +37,8 @@ Only the names of required settings are documented here. Never record values in 
 | `CROWSNEST_DB_PATH` | SQLite file path. Default `data/crowsnest.sqlite3` |
 | `CROWSNEST_DRY_RUN` | When `true`, uses a dry-run messenger instead of Feishu |
 | `CROWSNEST_RECONCILE_DRY_RUN` | When `true`, the Hook Reconciler does not write to GitLab |
+| `CROWSNEST_DELIVERY_POLL_INTERVAL` | Outbox worker poll interval. Default `2s` |
+| `CROWSNEST_RECONCILE_INTERVAL` | Hook reconcile interval. Default `15m` |
 | `CROWSNEST_IDENTITY_SYNC_ENABLED` | Enables the worker that syncs GitLab user to Feishu user mappings |
 | `CROWSNEST_IDENTITY_SYNC_DRY_RUN` | When `true`, the user mapping database is not modified |
 | `CROWSNEST_IDENTITY_SYNC_INTERVAL` | User mapping sync interval. Default `1h` |
@@ -51,6 +53,7 @@ Only the names of required settings are documented here. Never record values in 
 | `CROWSNEST_GITLAB_HOOK_NAME` | Hook name owned by Crowsnest |
 | `CROWSNEST_GITLAB_SSL_VERIFY` | Whether outgoing GitLab HTTPS requests verify certificates |
 | `CROWSNEST_ALLOWED_EMAIL_DOMAINS` | Allowed email domain list for recipients |
+| `CROWSNEST_FEISHU_BASE_URL` | Feishu Open API base URL. Default `https://open.feishu.cn` |
 | `CROWSNEST_FEISHU_APP_ID` | Feishu App ID |
 | `CROWSNEST_FEISHU_APP_SECRET` | Feishu App Secret |
 
@@ -91,7 +94,7 @@ The list is normalized to lowercase and separated by commas. To restore full del
 
 ## Notification preferences
 
-Crowsnest currently uses the default notification policy stored in SQLite; the `issue_updated` default is `false`. Per-user preference management will be added later through an admin API/UI.
+The default notification policy lives in SQLite; the `issue_updated` default is `false`. Recipients can also pause all alerts for 30 days from the card settings panel: the mute deadline is stored per recipient and evaluated lazily, so alerts resume automatically when it passes.
 
 ## Hook Reconciler
 

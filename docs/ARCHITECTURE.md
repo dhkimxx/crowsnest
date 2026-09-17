@@ -6,7 +6,7 @@ Status: initial baseline agreed; details still evolving
 
 Crowsnest is a self-hosted service that converts events from Git services such as GitLab, GitHub, and Forgejo into a common internal event, resolves recipients deterministically, and delivers personalized Feishu direct messages through a persistent outbox.
 
-This implementation targets GitLab 17.6 and the Feishu Self-Built App Bot. Boundaries are drawn so that other providers and LLM features can be added as adapters without rewriting the core logic.
+This implementation targets GitLab 17.6 and the Feishu Self-Built App Bot. Boundaries are drawn so that other providers can be added as adapters without rewriting the core logic.
 
 ## Key decisions
 
@@ -16,7 +16,6 @@ This implementation targets GitLab 17.6 and the Feishu Self-Built App Bot. Bound
 - Feishu delivery happens asynchronously in a persistent outbox worker
 - GitLab payload shapes and version differences are absorbed by the provider adapter's decoder
 - Recipients, authentication, deduplication, and delivery success are deterministic
-- The LLM is an asynchronous enricher added later; it never blocks base notifications
 - Feishu is called through the official HTTP API; no Custom Bot SDK dependency
 
 ## Runtime layout
@@ -125,7 +124,7 @@ Defines the minimal interfaces each caller needs. There is no single giant provi
 - `git/gitlab/v17_6`: GitLab 17.6 webhook decoder and GitLab API hook controller
 - `messenger/feishu`: tenant token and personal message delivery
 - `database/sqlite`: initial persistence implementation
-- Future additions: `git/github`, `git/forgejo`, `database/postgres`, `messenger/slack`
+- Other providers and stores can be added behind the same ports.
 
 ## Canonical event model
 
@@ -240,18 +239,6 @@ card.action.trigger
 - Interaction callbacks are deduplicated by event id and audited in `interaction_events` (actor, action, result).
 - The settings panel is rendered from the database on every open, so card state is never stale.
 - Actions that only change Crowsnest's own notification state (mute, unmute, panel navigation) live in this path. Changing external systems (GitLab) requires an explicit approval and audit boundary and is out of scope.
-
-## LLM extension
-
-The LLM is an asynchronous `AIEnricher` that reads `CanonicalEvent` and deterministic notifications.
-
-```text
-CanonicalEvent
-  ├─ deterministic router → base delivery
-  └─ AIEnricher → AIAnnotation → optional card enrichment
-```
-
-The LLM never decides recipients, bypasses authentication, deduplicates events, or marks deliveries successful.
 
 ## Go package layout
 
