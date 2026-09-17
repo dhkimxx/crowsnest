@@ -4,12 +4,12 @@
 
 ## 목표
 
-GitLab 인스턴스의 이벤트를 개인별 실행 알림으로 변환해 Feishu Self-Built App Bot 개인 DM으로 전달한다. n8n과 독립된 Go 서비스로 운영하며, 향후 LLM 분석을 추가할 수 있는 경계를 둔다.
+GitLab 인스턴스의 이벤트를 개인별 실행 알림으로 변환해 Feishu Self-Built App Bot 개인 DM으로 전달한다. 단독 Go 서비스로 운영하며, 향후 LLM 분석을 추가할 수 있는 경계를 둔다.
 
 ## 합의된 기본값
 
 - 언어: Go
-- 배포: n8n과 분리된 Docker Compose
+- 배포: Docker Compose
 - Crowsnest 외부 포트: `5680`
 - 저장소: 초기 SQLite
 - 입력 URL: 하나의 `/webhook/gitlab` 엔드포인트
@@ -18,7 +18,7 @@ GitLab 인스턴스의 이벤트를 개인별 실행 알림으로 변환해 Feis
 - 초기 실행: dry-run 우선
 - LLM: 이번 버전은 호출하지 않고 확장 인터페이스만 준비
 - GitLab 변경: 알림 경로에서 승인·댓글·라벨 변경 등을 수행하지 않음
-- 기존 n8n 워크플로우: 수정하지 않음
+- 기존 외부 자동화: 수정하지 않음
 
 ## 구현 범위
 
@@ -103,7 +103,7 @@ GitLab 인스턴스의 이벤트를 개인별 실행 알림으로 변환해 Feis
 - 사용자 설정 UI와 slash command
 - 모든 GitLab 이벤트 지원
 - Confidential 이벤트 기본 전송
-- 기존 n8n 이벤트 경로 편입
+- 기존 이벤트 수신 경로 편입
 - 운영 환경의 실제 Hook 활성화 및 외부 시스템 변경
 
 ## 향후 LLM 확장 경계
