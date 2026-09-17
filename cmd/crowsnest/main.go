@@ -85,6 +85,20 @@ func serve(logger *slog.Logger) error {
 		}
 	}()
 
+	interactionWorker, err := buildInteractionWorker(settings, store, logger)
+	if err != nil {
+		return err
+	}
+	if interactionWorker != nil {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			if workerErr := interactionWorker.Run(ctx); workerErr != nil && !errors.Is(workerErr, context.Canceled) {
+				logger.Error("feishu interaction worker stopped", "error", workerErr)
+			}
+		}()
+	}
+
 	controller, err := buildHookController(settings)
 	if err != nil {
 		return err
@@ -217,4 +231,17 @@ func buildMessenger(settings config.Settings, logger *slog.Logger) (ports.Messen
 		AppID:     settings.FeishuAppID,
 		AppSecret: settings.FeishuAppSecret,
 	}, nil)
+}
+
+func buildInteractionWorker(settings config.Settings, store *sqlite.Store, logger *slog.Logger) (*feishu.InteractionWorker, error) {
+	if settings.DryRun || settings.FeishuAppID == "" || settings.FeishuAppSecret == "" {
+		return nil, nil
+	}
+	service := application.NewInteractionService(store, store, logger)
+	return feishu.NewInteractionWorker(feishu.InteractionWorkerConfig{
+		AppID:     settings.FeishuAppID,
+		AppSecret: settings.FeishuAppSecret,
+		Handler:   service,
+		Logger:    logger,
+	})
 }

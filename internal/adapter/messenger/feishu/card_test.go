@@ -118,3 +118,29 @@ func TestRenderCardUsesCommentButton(t *testing.T) {
 		t.Fatalf("card = %s", card)
 	}
 }
+
+func TestRenderCardIncludesNotificationActions(t *testing.T) {
+	card, err := RenderCard(domain.Notification{
+		Kind:      domain.EventKindPipeline,
+		Action:    "failed",
+		Title:     "[GitLab] Pipeline failed",
+		Summary:   "group/project · failed",
+		URL:       "https://gitlab.example/group/project/-/pipelines/1",
+		Recipient: domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "carol@example.com"},
+		Reasons:   []domain.NotificationReason{{Code: "ci_failed", Text: "The pipeline for your commit failed."}},
+		Actions: []domain.NotificationAction{{
+			Action: domain.ActionMuteReason,
+			Label:  "Mute \"Pipeline failed\"",
+			Value:  map[string]string{"reason": "ci_failed", "title": "Pipeline failed"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("RenderCard() error = %v", err)
+	}
+	content := string(card)
+	for _, expected := range []string{`"update_multi":true`, `Mute \"Pipeline failed\"`, `"reason":"ci_failed"`, `"action":"mute_reason"`, `"tag":"action"`} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("card does not contain %q: %s", expected, content)
+		}
+	}
+}

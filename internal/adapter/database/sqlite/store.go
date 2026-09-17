@@ -201,6 +201,17 @@ func (s *Store) migrate(ctx context.Context) error {
 			occurrences INTEGER NOT NULL DEFAULT 1,
 			PRIMARY KEY (event_key, provider, provider_id, username)
 		)`,
+		`CREATE TABLE IF NOT EXISTS interaction_events (
+			event_id TEXT PRIMARY KEY,
+			message_id TEXT NOT NULL DEFAULT '',
+			actor_id TEXT NOT NULL DEFAULT '',
+			action TEXT NOT NULL DEFAULT '',
+			result TEXT NOT NULL DEFAULT 'processing',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS interaction_events_created_idx ON interaction_events (created_at)`,
+		`CREATE INDEX IF NOT EXISTS deliveries_message_idx ON deliveries (provider_message_id) WHERE provider_message_id IS NOT NULL`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -215,6 +226,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (2, ?)`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		return fmt.Errorf("record SQLite retryable migration: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (3, ?)`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return fmt.Errorf("record SQLite interaction migration: %w", err)
 	}
 	return nil
 }
@@ -685,20 +699,7 @@ func (s *Store) Enabled(ctx context.Context, address domain.RecipientAddress, ki
 	if email == "" {
 		return false, nil
 	}
-	columns := map[string]string{
-		"ci_failed":           "ci_failed",
-		"ci_recovered":        "ci_recovered",
-		"mr_review_requested": "mr_review_requested",
-		"mr_assigned":         "mr_assigned",
-		"mr_updated":          "mr_updated",
-		"mr_approved":         "mr_approved",
-		"mr_state_changed":    "mr_state_changed",
-		"mr_comment":          "mr_comment",
-		"mention":             "mention",
-		"issue_assigned":      "issue_assigned",
-		"issue_updated":       "issue_updated",
-	}
-	column := columns[reasonCode]
+	column := preferenceReasonColumns[reasonCode]
 	if column == "" {
 		return true, nil
 	}

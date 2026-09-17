@@ -41,9 +41,34 @@ type UnresolvedStore interface {
 
 type PreferenceStore interface {
 	Enabled(context.Context, domain.RecipientAddress, domain.EventKind, string, string) (bool, error)
+	SetReasonEnabled(context.Context, domain.RecipientAddress, string, bool) error
 }
 
 type PipelineStateStore interface {
 	Get(context.Context, string) (*domain.PipelineState, error)
 	Put(context.Context, domain.PipelineState) error
+}
+
+type InteractionRecord struct {
+	EventID   string
+	Provider  domain.Provider
+	MessageID string
+	ActorID   string
+	Action    string
+	Result    string
+}
+
+type RecordedDelivery struct {
+	Key          string
+	Notification domain.Notification
+}
+
+type InteractionStore interface {
+	BeginInteraction(context.Context, InteractionRecord) (bool, error)
+	FinishInteraction(context.Context, string, string) error
+	DeliveryByMessageID(context.Context, string) (*RecordedDelivery, error)
+}
+
+type InteractionHandler interface {
+	Handle(context.Context, domain.Interaction) (domain.InteractionResult, error)
 }

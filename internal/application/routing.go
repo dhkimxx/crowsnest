@@ -124,6 +124,7 @@ func (r *Router) Route(ctx context.Context, event domain.CanonicalEvent) (RouteR
 				FailedJobs:     failedJobNames(event),
 				FailedJobLinks: failedJobLinks(event),
 				RelatedLinks:   relatedLinks(event, notificationURL(event)),
+				Actions:        notificationActions(event, reasons),
 			},
 		}
 		result.Deliveries = append(result.Deliveries, delivery)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dhkimxx/crowsnest/internal/domain"
+	"github.com/dhkimxx/crowsnest/internal/ports"
 )
 
 func TestStoreEnqueueClaimAndDeliver(t *testing.T) {
@@ -237,5 +238,97 @@ func testEvent(key string) domain.CanonicalEvent {
 		ReceivedAt:    time.Now().UTC(),
 		Project:       domain.ProjectRef{ID: "76", Path: "group/project"},
 		Object:        domain.ResourceRef{Kind: domain.EventKindPipeline, ID: "31"},
+	}
+}
+
+func TestStoreInteractionPreferencesAndMessageLookup(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	address := domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "carol@example.com"}
+
+	if err := store.SetReasonEnabled(ctx, address, "ci_failed", false); err != nil {
+		t.Fatalf("SetReasonEnabled() error = %v", err)
+	}
+	enabled, err := store.Enabled(ctx, address, domain.EventKindPipeline, "ci_failed", "group/project")
+	if err != nil {
+		t.Fatalf("Enabled() error = %v", err)
+	}
+	if enabled {
+		t.Fatal("ci_failed should be muted")
+	}
+	if err := store.SetReasonEnabled(ctx, address, "ci_recovered", false); err != nil {
+		t.Fatalf("SetReasonEnabled() error = %v", err)
+	}
+	if err := store.SetReasonEnabled(ctx, address, "ci_failed", true); err != nil {
+		t.Fatalf("SetReasonEnabled() error = %v", err)
+	}
+	enabled, err = store.Enabled(ctx, address, domain.EventKindPipeline, "ci_failed", "group/project")
+	if err != nil {
+		t.Fatalf("Enabled() error = %v", err)
+	}
+	if !enabled {
+		t.Fatal("ci_failed should be enabled again")
+	}
+	enabled, err = store.Enabled(ctx, address, domain.EventKindPipeline, "ci_recovered", "group/project")
+	if err != nil {
+		t.Fatalf("Enabled() error = %v", err)
+	}
+	if enabled {
+		t.Fatal("ci_recovered should stay muted")
+	}
+	if err := store.SetReasonEnabled(ctx, address, "unknown_reason", true); err == nil {
+		t.Fatal("unsupported reason should fail")
+	}
+
+	event := testEvent("event-interaction")
+	delivery := domain.Delivery{
+		Key: "delivery-interaction",
+		Notification: domain.Notification{
+			EventKey:  event.EventKey,
+			Kind:      domain.EventKindPipeline,
+			Action:    "failed",
+			Recipient: address,
+			Reasons:   []domain.NotificationReason{{Code: "ci_failed", Text: "The pipeline for your commit failed."}},
+		},
+	}
+	if err := store.Enqueue(ctx, event, []domain.Delivery{delivery}); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+	if err := store.MarkDelivered(ctx, delivery.Key, domain.DeliveryReceipt{ProviderMessageID: "om_123"}); err != nil {
+		t.Fatalf("MarkDelivered() error = %v", err)
+	}
+	record, err := store.DeliveryByMessageID(ctx, "om_123")
+	if err != nil {
+		t.Fatalf("DeliveryByMessageID() error = %v", err)
+	}
+	if record == nil || record.Key != delivery.Key || record.Notification.Recipient.Value != "carol@example.com" {
+		t.Fatalf("record = %#v", record)
+	}
+	missing, err := store.DeliveryByMessageID(ctx, "om_missing")
+	if err != nil || missing != nil {
+		t.Fatalf("missing record = %#v err = %v", missing, err)
+	}
+
+	interaction := ports.InteractionRecord{EventID: "evt-1", MessageID: "om_123", ActorID: "ou_1", Action: domain.ActionMuteReason}
+	duplicate, err := store.BeginInteraction(ctx, interaction)
+	if err != nil || duplicate {
+		t.Fatalf("BeginInteraction() duplicate = %v err = %v", duplicate, err)
+	}
+	duplicate, err = store.BeginInteraction(ctx, interaction)
+	if err != nil {
+		t.Fatalf("BeginInteraction() error = %v", err)
+	}
+	if !duplicate {
+		t.Fatal("second BeginInteraction() should be a duplicate")
+	}
+	if err := store.FinishInteraction(ctx, "evt-1", domain.InteractionApplied); err != nil {
+		t.Fatalf("FinishInteraction() error = %v", err)
+	}
+	var result string
+	if err := store.db.QueryRowContext(ctx, `SELECT result FROM interaction_events WHERE event_id = ?`, "evt-1").Scan(&result); err != nil {
+		t.Fatalf("query interaction result: %v", err)
+	}
+	if result != domain.InteractionApplied {
+		t.Fatalf("interaction result = %q", result)
 	}
 }

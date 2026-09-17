@@ -105,8 +105,11 @@ func RenderCard(notification domain.Notification) ([]byte, error) {
 			},
 		})
 	}
+	if len(notification.Actions) > 0 {
+		elements = append(elements, map[string]any{"tag": "action", "actions": actionButtons(notification.Actions)})
+	}
 	card := map[string]any{
-		"config": map[string]any{"wide_screen_mode": true},
+		"config": map[string]any{"wide_screen_mode": true, "update_multi": true},
 		"header": map[string]any{
 			"template": template,
 			"title":    map[string]any{"tag": "plain_text", "content": title},
@@ -142,6 +145,27 @@ func joinLimited(values []string, limit int) string {
 		return strings.Join(values, ", ")
 	}
 	return strings.Join(values[:limit], ", ") + fmt.Sprintf(" +%d more", len(values)-limit)
+}
+
+func actionButtons(actions []domain.NotificationAction) []any {
+	buttons := make([]any, 0, len(actions))
+	for _, action := range actions {
+		if action.Label == "" {
+			continue
+		}
+		value := make(map[string]any, len(action.Value)+1)
+		for key, item := range action.Value {
+			value[key] = item
+		}
+		value["action"] = action.Action
+		buttons = append(buttons, map[string]any{
+			"tag":   "button",
+			"type":  "default",
+			"text":  map[string]any{"tag": "plain_text", "content": action.Label},
+			"value": value,
+		})
+	}
+	return buttons
 }
 
 func openButtonLabel(notification domain.Notification) string {

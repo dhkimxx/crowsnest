@@ -20,6 +20,17 @@ type NotificationLink struct {
 	URL   string `json:"url"`
 }
 
+const (
+	ActionMuteReason   = "mute_reason"
+	ActionUnmuteReason = "unmute_reason"
+)
+
+type NotificationAction struct {
+	Action string            `json:"action"`
+	Label  string            `json:"label"`
+	Value  map[string]string `json:"value,omitempty"`
+}
+
 type Notification struct {
 	EventKey       string               `json:"event_key"`
 	Kind           EventKind            `json:"kind"`
@@ -36,6 +47,7 @@ type Notification struct {
 	FailedJobs     []string             `json:"failed_jobs,omitempty"`
 	FailedJobLinks []NotificationLink   `json:"failed_job_links,omitempty"`
 	RelatedLinks   []NotificationLink   `json:"related_links,omitempty"`
+	Actions        []NotificationAction `json:"actions,omitempty"`
 }
 
 type Delivery struct {
