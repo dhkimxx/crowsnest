@@ -183,6 +183,7 @@ func (s *Store) migrate(ctx context.Context) error {
 			issue_updated INTEGER NOT NULL DEFAULT 0,
 			project_include TEXT NOT NULL DEFAULT '',
 			project_exclude TEXT NOT NULL DEFAULT '',
+			muted_until TEXT NOT NULL DEFAULT '',
 			updated_at TEXT NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS pipeline_states (
@@ -221,6 +222,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "deliveries", "retryable", "INTEGER NOT NULL DEFAULT 1"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "notification_preferences", "muted_until", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	if err := s.normalizeTimestamps(ctx); err != nil {
 		return err
 	}
@@ -235,6 +239,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (4, ?)`, nowTimestamp()); err != nil {
 		return fmt.Errorf("record SQLite timestamp migration: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (5, ?)`, nowTimestamp()); err != nil {
+		return fmt.Errorf("record SQLite mute migration: %w", err)
 	}
 	return nil
 }
@@ -709,22 +716,38 @@ func (s *Store) Enabled(ctx context.Context, address domain.RecipientAddress, ki
 	if column == "" {
 		return true, nil
 	}
-	query := fmt.Sprintf(`SELECT enabled, %s, project_include, project_exclude FROM notification_preferences WHERE email = ?`, column)
+	query := fmt.Sprintf(`SELECT enabled, %s, project_include, project_exclude, muted_until FROM notification_preferences WHERE email = ?`, column)
 	var enabled, reasonEnabled int
-	var include, exclude string
-	if err := s.db.QueryRowContext(ctx, query, email).Scan(&enabled, &reasonEnabled, &include, &exclude); err != nil {
+	var include, exclude, mutedUntil string
+	if err := s.db.QueryRowContext(ctx, query, email).Scan(&enabled, &reasonEnabled, &include, &exclude, &mutedUntil); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return reasonCode != "issue_updated", nil
 		}
 		return false, fmt.Errorf("read notification preference: %w", err)
 	}
-	if enabled == 0 || reasonEnabled == 0 {
+	if enabled == 0 {
+		if !muteExpired(mutedUntil, time.Now()) {
+			return false, nil
+		}
+	}
+	if reasonEnabled == 0 {
 		return false, nil
 	}
 	if !projectAllowed(projectPath, include, exclude) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func muteExpired(mutedUntil string, now time.Time) bool {
+	if strings.TrimSpace(mutedUntil) == "" {
+		return false
+	}
+	until, err := time.Parse(timestampFormat, mutedUntil)
+	if err != nil {
+		return false
+	}
+	return !now.UTC().Before(until)
 }
 
 func (s *Store) Get(ctx context.Context, key string) (*domain.PipelineState, error) {

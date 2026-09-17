@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/dhkimxx/crowsnest/internal/domain"
 	"github.com/dhkimxx/crowsnest/internal/ports"
@@ -25,20 +26,25 @@ var preferenceReasonColumns = map[string]string{
 	"issue_updated":       "issue_updated",
 }
 
-func (s *Store) SetReasonEnabled(ctx context.Context, address domain.RecipientAddress, reasonCode string, enabled bool) error {
+func (s *Store) SetMute(ctx context.Context, address domain.RecipientAddress, until *time.Time) error {
 	email := usableEmail(address.Value)
 	if email == "" {
 		return errors.New("a usable preference email is required")
 	}
-	column, ok := preferenceReasonColumns[reasonCode]
-	if !ok {
-		return fmt.Errorf("unsupported preference reason %q", reasonCode)
+	enabled := true
+	mutedUntil := ""
+	if until != nil {
+		enabled = false
+		mutedUntil = formatTimestamp(*until)
 	}
 	now := nowTimestamp()
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO notification_preferences(email, %[1]s, updated_at) VALUES(?, ?, ?)
-		ON CONFLICT(email) DO UPDATE SET %[1]s = excluded.%[1]s, updated_at = excluded.updated_at`, column),
-		email, boolInt(enabled), now)
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO notification_preferences(email, enabled, muted_until, updated_at) VALUES(?, ?, ?, ?)
+		ON CONFLICT(email) DO UPDATE SET
+			enabled = excluded.enabled,
+			muted_until = excluded.muted_until,
+			updated_at = excluded.updated_at`,
+		email, boolInt(enabled), mutedUntil, now)
 	if err != nil {
 		return fmt.Errorf("write notification preference: %w", err)
 	}

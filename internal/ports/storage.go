@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/dhkimxx/crowsnest/internal/domain"
 )
@@ -41,7 +42,7 @@ type UnresolvedStore interface {
 
 type PreferenceStore interface {
 	Enabled(context.Context, domain.RecipientAddress, domain.EventKind, string, string) (bool, error)
-	SetReasonEnabled(context.Context, domain.RecipientAddress, string, bool) error
+	SetMute(context.Context, domain.RecipientAddress, *time.Time) error
 }
 
 type PipelineStateStore interface {

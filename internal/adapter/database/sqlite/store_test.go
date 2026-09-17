@@ -246,38 +246,37 @@ func TestStoreInteractionPreferencesAndMessageLookup(t *testing.T) {
 	ctx := context.Background()
 	address := domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "carol@example.com"}
 
-	if err := store.SetReasonEnabled(ctx, address, "ci_failed", false); err != nil {
-		t.Fatalf("SetReasonEnabled() error = %v", err)
+	future := time.Now().UTC().Add(30 * 24 * time.Hour)
+	if err := store.SetMute(ctx, address, &future); err != nil {
+		t.Fatalf("SetMute() error = %v", err)
 	}
 	enabled, err := store.Enabled(ctx, address, domain.EventKindPipeline, "ci_failed", "group/project")
 	if err != nil {
 		t.Fatalf("Enabled() error = %v", err)
 	}
 	if enabled {
-		t.Fatal("ci_failed should be muted")
+		t.Fatal("ci_failed should be muted until the deadline")
 	}
-	if err := store.SetReasonEnabled(ctx, address, "ci_recovered", false); err != nil {
-		t.Fatalf("SetReasonEnabled() error = %v", err)
-	}
-	if err := store.SetReasonEnabled(ctx, address, "ci_failed", true); err != nil {
-		t.Fatalf("SetReasonEnabled() error = %v", err)
+	past := time.Now().UTC().Add(-time.Minute)
+	if err := store.SetMute(ctx, address, &past); err != nil {
+		t.Fatalf("SetMute() error = %v", err)
 	}
 	enabled, err = store.Enabled(ctx, address, domain.EventKindPipeline, "ci_failed", "group/project")
 	if err != nil {
 		t.Fatalf("Enabled() error = %v", err)
 	}
 	if !enabled {
-		t.Fatal("ci_failed should be enabled again")
+		t.Fatal("an expired mute should resume notifications")
 	}
-	enabled, err = store.Enabled(ctx, address, domain.EventKindPipeline, "ci_recovered", "group/project")
+	if err := store.SetMute(ctx, address, nil); err != nil {
+		t.Fatalf("SetMute() error = %v", err)
+	}
+	enabled, err = store.Enabled(ctx, address, domain.EventKindPipeline, "ci_failed", "group/project")
 	if err != nil {
 		t.Fatalf("Enabled() error = %v", err)
 	}
-	if enabled {
-		t.Fatal("ci_recovered should stay muted")
-	}
-	if err := store.SetReasonEnabled(ctx, address, "unknown_reason", true); err == nil {
-		t.Fatal("unsupported reason should fail")
+	if !enabled {
+		t.Fatal("unmute should resume notifications")
 	}
 
 	event := testEvent("event-interaction")
@@ -309,7 +308,7 @@ func TestStoreInteractionPreferencesAndMessageLookup(t *testing.T) {
 		t.Fatalf("missing record = %#v err = %v", missing, err)
 	}
 
-	interaction := ports.InteractionRecord{EventID: "evt-1", MessageID: "om_123", ActorID: "ou_1", Action: domain.ActionMuteReason}
+	interaction := ports.InteractionRecord{EventID: "evt-1", MessageID: "om_123", ActorID: "ou_1", Action: domain.ActionMuteAll}
 	duplicate, err := store.BeginInteraction(ctx, interaction)
 	if err != nil || duplicate {
 		t.Fatalf("BeginInteraction() duplicate = %v err = %v", duplicate, err)

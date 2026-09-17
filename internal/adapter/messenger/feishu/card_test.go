@@ -129,16 +129,15 @@ func TestRenderCardIncludesNotificationActions(t *testing.T) {
 		Recipient: domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "carol@example.com"},
 		Reasons:   []domain.NotificationReason{{Code: "ci_failed", Text: "The pipeline for your commit failed."}},
 		Actions: []domain.NotificationAction{{
-			Action: domain.ActionMuteReason,
-			Label:  "Mute \"Pipeline failed\"",
-			Value:  map[string]string{"reason": "ci_failed", "title": "Pipeline failed"},
+			Action: domain.ActionMuteAll,
+			Label:  "Mute 30d",
 		}},
 	})
 	if err != nil {
 		t.Fatalf("RenderCard() error = %v", err)
 	}
 	content := string(card)
-	for _, expected := range []string{`"update_multi":true`, `Mute \"Pipeline failed\"`, `"reason":"ci_failed"`, `"action":"mute_reason"`, `"tag":"action"`} {
+	for _, expected := range []string{`"update_multi":true`, `Mute 30d`, `"action":"mute_all"`, `"tag":"action"`} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("card does not contain %q: %s", expected, content)
 		}

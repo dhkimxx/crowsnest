@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/dhkimxx/crowsnest/internal/domain"
 	"github.com/dhkimxx/crowsnest/internal/ports"
@@ -14,13 +15,14 @@ type InteractionService struct {
 	store       ports.InteractionStore
 	preferences ports.PreferenceStore
 	logger      *slog.Logger
+	clock       func() time.Time
 }
 
 func NewInteractionService(store ports.InteractionStore, preferences ports.PreferenceStore, logger *slog.Logger) *InteractionService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &InteractionService{store: store, preferences: preferences, logger: logger}
+	return &InteractionService{store: store, preferences: preferences, logger: logger, clock: time.Now}
 }
 
 func (s *InteractionService) Handle(ctx context.Context, interaction domain.Interaction) (domain.InteractionResult, error) {
@@ -50,13 +52,9 @@ func (s *InteractionService) Handle(ctx context.Context, interaction domain.Inte
 }
 
 func (s *InteractionService) apply(ctx context.Context, interaction domain.Interaction) domain.InteractionResult {
-	if interaction.Action != domain.ActionMuteReason && interaction.Action != domain.ActionUnmuteReason {
+	if interaction.Action != domain.ActionMuteAll && interaction.Action != domain.ActionUnmuteAll {
 		s.logger.Warn("unsupported interaction action", "action", interaction.Action)
 		return domain.InteractionResult{Status: domain.InteractionIgnored}
-	}
-	reason := strings.TrimSpace(interaction.Value["reason"])
-	if !toggleableReason(reason) {
-		return domain.InteractionResult{Status: domain.InteractionRejected, Toast: "This action is not supported."}
 	}
 	record, err := s.store.DeliveryByMessageID(ctx, interaction.MessageID)
 	if err != nil {
@@ -66,63 +64,30 @@ func (s *InteractionService) apply(ctx context.Context, interaction domain.Inter
 	if record == nil {
 		return domain.InteractionResult{Status: domain.InteractionRejected, Toast: "This alert can no longer be updated."}
 	}
-	if !notificationHasReason(record.Notification, reason) {
-		return domain.InteractionResult{Status: domain.InteractionRejected, Toast: "This action is not supported."}
+	muted := interaction.Action == domain.ActionMuteAll
+	var until *time.Time
+	if muted {
+		deadline := s.clock().Add(muteDuration)
+		until = &deadline
 	}
-	enabled := interaction.Action == domain.ActionUnmuteReason
-	if err := s.preferences.SetReasonEnabled(ctx, record.Notification.Recipient, reason, enabled); err != nil {
+	if err := s.preferences.SetMute(ctx, record.Notification.Recipient, until); err != nil {
 		s.logger.Error("could not update notification preference", "error", err)
 		return domain.InteractionResult{Status: domain.InteractionRejected, Toast: "This action could not be applied."}
 	}
 	updated := record.Notification
-	reasonTitle := notificationActionTitle(updated, reason)
-	updated.Actions = toggleNotificationActions(updated.Actions, reason, reasonTitle, enabled)
+	updated.Actions = []domain.NotificationAction{muteAction(muted)}
+	toast := "Unmuted."
+	if muted {
+		toast = "Muted for 30 days."
+	}
 	s.logger.Info("interaction applied",
 		"action", interaction.Action,
-		"reason", reason,
 		"delivery_key", record.Key,
 		"actor", interaction.ActorID,
 	)
 	return domain.InteractionResult{
 		Status:       domain.InteractionApplied,
 		Notification: &updated,
-		Toast:        toastFor(reasonTitle, enabled),
+		Toast:        toast,
 	}
-}
-
-func toggleNotificationActions(actions []domain.NotificationAction, reasonCode, reasonTitle string, enabled bool) []domain.NotificationAction {
-	updated := make([]domain.NotificationAction, 0, len(actions))
-	for _, action := range actions {
-		if action.Value["reason"] != reasonCode {
-			updated = append(updated, action)
-			continue
-		}
-		updated = append(updated, toggleReasonAction(reasonCode, reasonTitle, enabled))
-	}
-	return updated
-}
-
-func notificationHasReason(notification domain.Notification, reasonCode string) bool {
-	for _, reason := range notification.Reasons {
-		if reason.Code == reasonCode {
-			return true
-		}
-	}
-	return false
-}
-
-func notificationActionTitle(notification domain.Notification, reasonCode string) string {
-	for _, action := range notification.Actions {
-		if action.Value["reason"] == reasonCode && action.Value["title"] != "" {
-			return action.Value["title"]
-		}
-	}
-	return reasonCode
-}
-
-func toastFor(title string, enabled bool) string {
-	if enabled {
-		return "Alerts are on again for " + title + "."
-	}
-	return "Alerts are muted for " + title + "."
 }

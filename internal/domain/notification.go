@@ -21,8 +21,8 @@ type NotificationLink struct {
 }
 
 const (
-	ActionMuteReason   = "mute_reason"
-	ActionUnmuteReason = "unmute_reason"
+	ActionMuteAll   = "mute_all"
+	ActionUnmuteAll = "unmute_all"
 )
 
 type NotificationAction struct {

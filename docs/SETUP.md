@@ -131,7 +131,7 @@ Real delivery mode requires the Feishu Self-Built App Bot feature and message-se
 
 ## Card interactions
 
-Notification cards include a per-reason toggle button so a recipient can mute or unmute that alert type without editor access to the database. When Feishu app credentials are configured and `CROWSNEST_DRY_RUN=false`, `serve` also opens a Feishu long connection (WebSocket) to receive card callbacks, so no public callback URL is required.
+Notification cards include a single mute toggle so a recipient can pause all alerts for 30 days without editor access to the database. When Feishu app credentials are configured and `CROWSNEST_DRY_RUN=false`, `serve` also opens a Feishu long connection (WebSocket) to receive card callbacks, so no public callback URL is required.
 
 Console steps, in order:
 
@@ -146,7 +146,8 @@ Runtime behavior:
 - `deliveries.provider_message_id` maps a clicked card back to its delivery and recipient. Callbacks for unknown message IDs are rejected.
 - Interactions are recorded in `interaction_events` keyed by the callback event ID, so Feishu retries are deduplicated.
 - Card interactions are accepted for 30 days after sending; card updates only take effect for 14 days.
-- Muting writes a per-reason preference for that recipient; the next event of that type skips the delivery. Unmuting restores it from the card button.
+- Muting sets a 30-day deadline for that recipient; deliveries are skipped until it passes. The deadline is evaluated lazily on read, so notifications resume automatically without a scheduler.
+- Unmuting clears the deadline from the card button. Because a muted recipient receives no new cards, the last received card (interactable for 30 days) is the control surface for resuming.
 
 ## Security notes
 

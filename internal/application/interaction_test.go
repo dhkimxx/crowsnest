@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/dhkimxx/crowsnest/internal/domain"
 	"github.com/dhkimxx/crowsnest/internal/ports"
@@ -35,32 +36,30 @@ func (f *fakeInteractionStore) DeliveryByMessageID(_ context.Context, _ string) 
 type fakePreferenceStore struct {
 	calls   int
 	address domain.RecipientAddress
-	reason  string
-	enabled bool
+	until   *time.Time
 }
 
 func (f *fakePreferenceStore) Enabled(context.Context, domain.RecipientAddress, domain.EventKind, string, string) (bool, error) {
 	return true, nil
 }
 
-func (f *fakePreferenceStore) SetReasonEnabled(_ context.Context, address domain.RecipientAddress, reason string, enabled bool) error {
+func (f *fakePreferenceStore) SetMute(_ context.Context, address domain.RecipientAddress, until *time.Time) error {
 	f.calls++
 	f.address = address
-	f.reason = reason
-	f.enabled = enabled
+	f.until = until
 	return nil
 }
 
 func interactionDelivery() *ports.RecordedDelivery {
 	return &ports.RecordedDelivery{
-		Key: "gitlab:pipeline:1:carol@example.com:ci_failed",
+		Key: "gitlab:header:pipeline-1:carol@example.com:ci_failed",
 		Notification: domain.Notification{
 			EventKey:  "event-1",
 			Kind:      domain.EventKindPipeline,
 			Action:    "failed",
 			Recipient: domain.RecipientAddress{Kind: domain.AddressKindEmail, Value: "carol@example.com"},
 			Reasons:   []domain.NotificationReason{{Code: ReasonCIFailed, Text: "The pipeline for your commit failed."}},
-			Actions:   []domain.NotificationAction{toggleReasonAction(ReasonCIFailed, "Pipeline failed", true)},
+			Actions:   []domain.NotificationAction{muteAction(false)},
 		},
 	}
 }
@@ -70,15 +69,16 @@ func muteInteraction() domain.Interaction {
 		EventID:   "evt-1",
 		MessageID: "om_123",
 		ActorID:   "ou_1",
-		Action:    domain.ActionMuteReason,
-		Value:     map[string]string{"reason": ReasonCIFailed},
+		Action:    domain.ActionMuteAll,
 	}
 }
 
-func TestInteractionServiceMutesReason(t *testing.T) {
+func TestInteractionServiceMutesAllForThirtyDays(t *testing.T) {
 	store := &fakeInteractionStore{delivery: interactionDelivery()}
 	preferences := &fakePreferenceStore{}
 	service := NewInteractionService(store, preferences, nil)
+	fixed := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	service.clock = func() time.Time { return fixed }
 
 	result, err := service.Handle(context.Background(), muteInteraction())
 	if err != nil {
@@ -87,8 +87,11 @@ func TestInteractionServiceMutesReason(t *testing.T) {
 	if result.Status != domain.InteractionApplied {
 		t.Fatalf("status = %q", result.Status)
 	}
-	if preferences.calls != 1 || preferences.reason != ReasonCIFailed || preferences.enabled {
-		t.Fatalf("preference call = %d %q %v", preferences.calls, preferences.reason, preferences.enabled)
+	if preferences.calls != 1 || preferences.until == nil {
+		t.Fatalf("preference call = %d until = %v", preferences.calls, preferences.until)
+	}
+	if want := fixed.Add(30 * 24 * time.Hour); !preferences.until.Equal(want) {
+		t.Fatalf("muted until = %v, want %v", preferences.until, want)
 	}
 	if preferences.address.Value != "carol@example.com" {
 		t.Fatalf("preference address = %#v", preferences.address)
@@ -96,35 +99,35 @@ func TestInteractionServiceMutesReason(t *testing.T) {
 	if result.Notification == nil || len(result.Notification.Actions) != 1 {
 		t.Fatalf("notification = %#v", result.Notification)
 	}
-	action := result.Notification.Actions[0]
-	if action.Action != domain.ActionUnmuteReason || action.Label != "Unmute \"Pipeline failed\"" {
+	if action := result.Notification.Actions[0]; action.Action != domain.ActionUnmuteAll || action.Label != "Unmute" {
 		t.Fatalf("action = %#v", action)
-	}
-	if store.finished["evt-1"] != domain.InteractionApplied {
-		t.Fatalf("finished = %#v", store.finished)
 	}
 	if result.Toast == "" {
 		t.Fatal("expected a toast message")
 	}
+	if store.finished["evt-1"] != domain.InteractionApplied {
+		t.Fatalf("finished = %#v", store.finished)
+	}
 }
 
-func TestInteractionServiceUnmutesReason(t *testing.T) {
-	delivery := interactionDelivery()
-	delivery.Notification.Actions = []domain.NotificationAction{toggleReasonAction(ReasonCIFailed, "Pipeline failed", false)}
-	store := &fakeInteractionStore{delivery: delivery}
+func TestInteractionServiceUnmutesAll(t *testing.T) {
+	store := &fakeInteractionStore{delivery: interactionDelivery()}
 	preferences := &fakePreferenceStore{}
 	service := NewInteractionService(store, preferences, nil)
 
 	interaction := muteInteraction()
-	interaction.Action = domain.ActionUnmuteReason
+	interaction.Action = domain.ActionUnmuteAll
 	result, err := service.Handle(context.Background(), interaction)
 	if err != nil {
 		t.Fatalf("Handle() error = %v", err)
 	}
-	if result.Status != domain.InteractionApplied || !preferences.enabled {
-		t.Fatalf("status = %q enabled = %v", result.Status, preferences.enabled)
+	if result.Status != domain.InteractionApplied || preferences.calls != 1 {
+		t.Fatalf("status = %q preference calls = %d", result.Status, preferences.calls)
 	}
-	if action := result.Notification.Actions[0]; action.Action != domain.ActionMuteReason {
+	if preferences.until != nil {
+		t.Fatalf("unmute should clear the deadline, got %v", preferences.until)
+	}
+	if action := result.Notification.Actions[0]; action.Action != domain.ActionMuteAll || action.Label != "Mute 30d" {
 		t.Fatalf("action = %#v", action)
 	}
 }
@@ -157,22 +160,6 @@ func TestInteractionServiceRejectsUnknownMessage(t *testing.T) {
 	}
 	if store.finished["evt-1"] != domain.InteractionRejected {
 		t.Fatalf("finished = %#v", store.finished)
-	}
-}
-
-func TestInteractionServiceRejectsReasonNotOnNotification(t *testing.T) {
-	store := &fakeInteractionStore{delivery: interactionDelivery()}
-	preferences := &fakePreferenceStore{}
-	service := NewInteractionService(store, preferences, nil)
-
-	interaction := muteInteraction()
-	interaction.Value = map[string]string{"reason": ReasonMention}
-	result, err := service.Handle(context.Background(), interaction)
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-	if result.Status != domain.InteractionRejected || preferences.calls != 0 {
-		t.Fatalf("result = %#v preference calls = %d", result, preferences.calls)
 	}
 }
 

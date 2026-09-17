@@ -31,9 +31,7 @@ func cardActionEvent() *callback.CardActionTriggerEvent {
 			Operator: &callback.Operator{OpenID: "ou_1"},
 			Context:  &callback.Context{OpenMessageID: "om_123"},
 			Action: &callback.CallBackAction{Value: map[string]interface{}{
-				"action": "mute_reason",
-				"reason": "ci_failed",
-				"title":  "Pipeline failed",
+				"action": "mute_all",
 			}},
 		},
 	}
@@ -47,10 +45,10 @@ func TestInteractionFromCardAction(t *testing.T) {
 	if interaction.EventID != "evt-1" || interaction.MessageID != "om_123" || interaction.ActorID != "ou_1" {
 		t.Fatalf("interaction = %#v", interaction)
 	}
-	if interaction.Action != domain.ActionMuteReason {
+	if interaction.Action != domain.ActionMuteAll {
 		t.Fatalf("action = %q", interaction.Action)
 	}
-	if interaction.Value["reason"] != "ci_failed" || interaction.Value["title"] != "Pipeline failed" {
+	if len(interaction.Value) != 0 {
 		t.Fatalf("value = %#v", interaction.Value)
 	}
 	if _, ok := interaction.Value["action"]; ok {
@@ -82,8 +80,8 @@ func TestInteractionWorkerUpdatesCard(t *testing.T) {
 		URL:       "https://gitlab.example/group/project/-/pipelines/1",
 		Reasons:   []domain.NotificationReason{{Code: "ci_failed", Text: "The pipeline for your commit failed."}},
 		Actions: []domain.NotificationAction{{
-			Action: domain.ActionUnmuteReason,
-			Label:  "Unmute \"Pipeline failed\"",
+			Action: domain.ActionUnmuteAll,
+			Label:  "Unmute",
 			Value:  map[string]string{"reason": "ci_failed", "title": "Pipeline failed"},
 		}},
 	}
@@ -114,7 +112,7 @@ func TestInteractionWorkerUpdatesCard(t *testing.T) {
 		t.Fatalf("marshal response: %v", err)
 	}
 	text := string(payload)
-	if !strings.Contains(text, "Unmute") || !strings.Contains(text, "ci_failed") {
+	if !strings.Contains(text, "Unmute") || !strings.Contains(text, `"action":"unmute_all"`) {
 		t.Fatalf("response does not contain the toggled action: %s", text)
 	}
 }
