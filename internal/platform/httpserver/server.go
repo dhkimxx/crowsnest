@@ -4,11 +4,9 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/dhkimxx/crowsnest/internal/application"
 )
@@ -75,14 +73,4 @@ func (s *Server) webhook(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(writer).Encode(result)
-}
-
-func (s *Server) SetMaxBodyBytes(value int64) {
-	if value > 0 {
-		s.maxBodyBytes = value
-	}
-}
-
-func (s *Server) String() string {
-	return fmt.Sprintf("gitlab webhook server secret_configured=%t", strings.TrimSpace(s.webhookSecret) != "")
 }
