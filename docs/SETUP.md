@@ -129,6 +129,25 @@ Replace the placeholder with an address routable from the GitLab server. If that
 
 Real delivery mode requires the Feishu Self-Built App Bot feature and message-send permission. Crowsnest uses the email directly as `receive_id`; converting email to `open_id` through the Feishu Contact API is not part of the default path.
 
+## Card interactions
+
+Notification cards include a per-reason toggle button so a recipient can mute or unmute that alert type without editor access to the database. When Feishu app credentials are configured and `CROWSNEST_DRY_RUN=false`, `serve` also opens a Feishu long connection (WebSocket) to receive card callbacks, so no public callback URL is required.
+
+Console steps, in order:
+
+1. Start Crowsnest with the Feishu app credentials so the long connection is online.
+2. In the Feishu developer console under **Events and callbacks**, enable **Receive events through persistent connection** and verify the connection.
+3. Under **Callback configuration**, subscribe **Card interaction callback** (`card.action.trigger`). Do not subscribe the legacy `card.action.trigger_v1`; subscribing both produces duplicate callbacks.
+4. Publish a new app version for the callback subscription. Enterprise admin approval may be required.
+
+Runtime behavior:
+
+- The callback handler must respond within 3 seconds; Crowsnest applies the toggle and returns the updated card in the response body.
+- `deliveries.provider_message_id` maps a clicked card back to its delivery and recipient. Callbacks for unknown message IDs are rejected.
+- Interactions are recorded in `interaction_events` keyed by the callback event ID, so Feishu retries are deduplicated.
+- Card interactions are accepted for 30 days after sending; card updates only take effect for 14 days.
+- Muting writes a per-reason preference for that recipient; the next event of that type skips the delivery. Unmuting restores it from the card button.
+
 ## Security notes
 
 - Never put App Secrets, GitLab API tokens, or webhook tokens into `.env.example`, fixtures, logs, or Git.
