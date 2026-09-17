@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/dhkimxx/crowsnest/internal/domain"
 	"github.com/dhkimxx/crowsnest/internal/ports"
@@ -30,6 +31,11 @@ func (r *DecoderRegistry) Decode(ctx context.Context, headers http.Header, body 
 	for _, decoder := range r.decoders {
 		event, err := decoder.Decode(ctx, headers, body)
 		if err == nil {
+			label := strings.TrimSpace(decoder.SourceLabel())
+			if label == "" {
+				label = string(decoder.Provider())
+			}
+			event.SourceLabel = label
 			return event, nil
 		}
 		if errors.Is(err, ports.ErrIgnoredEvent) {

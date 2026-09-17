@@ -12,6 +12,7 @@ var ErrIgnoredEvent = errors.New("ignored provider event")
 
 type WebhookDecoder interface {
 	Provider() domain.Provider
+	SourceLabel() string
 	Version() string
 	Decode(context.Context, http.Header, []byte) (domain.CanonicalEvent, error)
 }

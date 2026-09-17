@@ -13,7 +13,7 @@ import (
 func RenderCard(notification domain.Notification) ([]byte, error) {
 	title := notification.Title
 	if title == "" {
-		title = "GitLab 알림"
+		title = "Notification"
 	}
 	template := "blue"
 	if notification.Kind == domain.EventKindPipeline && notification.Action == "failed" {

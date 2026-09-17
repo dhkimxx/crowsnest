@@ -10,13 +10,14 @@ import (
 func TestRouterRoutesPipelineFailureToCommitAuthor(t *testing.T) {
 	router := NewRouter(nil, nil, &fakePipelineStateStore{}, []string{"example.com"})
 	event := domain.CanonicalEvent{
-		EventKey: "pipeline-1",
-		Source:   domain.ProviderGitLab,
-		Kind:     domain.EventKindPipeline,
-		Action:   "failed",
-		Project:  domain.ProjectRef{ID: "76", Path: "group/project"},
-		Actor:    domain.Identity{Provider: domain.ProviderGitLab, ProviderID: "7", Email: "runner@example.com"},
-		Object:   domain.ResourceRef{Kind: domain.EventKindPipeline, ID: "31", URL: "https://gitlab.example/pipeline/31"},
+		EventKey:    "pipeline-1",
+		Source:      domain.ProviderGitLab,
+		SourceLabel: "GitLab",
+		Kind:        domain.EventKindPipeline,
+		Action:      "failed",
+		Project:     domain.ProjectRef{ID: "76", Path: "group/project"},
+		Actor:       domain.Identity{Provider: domain.ProviderGitLab, ProviderID: "7", Email: "runner@example.com"},
+		Object:      domain.ResourceRef{Kind: domain.EventKindPipeline, ID: "31", URL: "https://gitlab.example/pipeline/31"},
 		Pipeline: &domain.PipelineDetails{
 			Status:       "failed",
 			Ref:          "main",
@@ -37,8 +38,36 @@ func TestRouterRoutesPipelineFailureToCommitAuthor(t *testing.T) {
 	if delivery.Notification.URL != "https://gitlab.example/pipeline/31" {
 		t.Fatalf("notification URL = %q", delivery.Notification.URL)
 	}
+	if delivery.Notification.Title != "[GitLab] Pipeline failed" {
+		t.Fatalf("notification title = %q", delivery.Notification.Title)
+	}
 	if result.PipelineState == nil || result.PipelineState.Status != "failed" || len(result.PipelineState.Recipients) != 1 {
 		t.Fatalf("pipeline state = %#v", result.PipelineState)
+	}
+}
+
+func TestRouterTitleFallsBackToProviderWithoutSourceLabel(t *testing.T) {
+	router := NewRouter(nil, nil, &fakePipelineStateStore{}, []string{"example.com"})
+	event := domain.CanonicalEvent{
+		EventKey: "pipeline-fallback-1",
+		Source:   domain.ProviderGitHub,
+		Kind:     domain.EventKindPipeline,
+		Action:   "failed",
+		Project:  domain.ProjectRef{ID: "1", Path: "org/repo"},
+		Pipeline: &domain.PipelineDetails{
+			Status:       "failed",
+			CommitAuthor: domain.Identity{Email: "user@example.com"},
+		},
+	}
+	result, err := router.Route(context.Background(), event)
+	if err != nil {
+		t.Fatalf("Route() error = %v", err)
+	}
+	if len(result.Deliveries) != 1 {
+		t.Fatalf("deliveries = %#v", result.Deliveries)
+	}
+	if got := result.Deliveries[0].Notification.Title; got != "[github] Pipeline failed" {
+		t.Fatalf("notification title = %q", got)
 	}
 }
 

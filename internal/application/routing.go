@@ -499,6 +499,14 @@ func deliveryKey(event domain.CanonicalEvent, address domain.RecipientAddress, r
 }
 
 func notificationTitle(event domain.CanonicalEvent, reasons []domain.NotificationReason) string {
+	label := strings.TrimSpace(event.SourceLabel)
+	if label == "" {
+		label = string(event.Source)
+	}
+	return fmt.Sprintf("[%s] %s", label, baseNotificationTitle(event, reasons))
+}
+
+func baseNotificationTitle(event domain.CanonicalEvent, reasons []domain.NotificationReason) string {
 	if len(reasons) == 1 {
 		return notificationReasonTitle(event, reasons[0].Code)
 	}

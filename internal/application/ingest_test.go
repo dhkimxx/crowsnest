@@ -29,6 +29,9 @@ func TestIngestServicePersistsEventAndDeliveries(t *testing.T) {
 	if result.Status != "accepted" || result.DeliveryCount != 1 || store.event.EventKey == "" || len(store.deliveries) != 1 {
 		t.Fatalf("result=%#v event=%#v deliveries=%#v", result, store.event, store.deliveries)
 	}
+	if store.event.SourceLabel != "GitLab" {
+		t.Fatalf("event source label = %q", store.event.SourceLabel)
+	}
 	if stateStore.state == nil || stateStore.state.Status != "failed" {
 		t.Fatalf("pipeline state = %#v", stateStore.state)
 	}

@@ -16,6 +16,13 @@ import (
 	"github.com/dhkimxx/crowsnest/internal/ports"
 )
 
+func TestDecoderSourceIdentity(t *testing.T) {
+	decoder := NewDecoder()
+	if decoder.Provider() != domain.ProviderGitLab || decoder.SourceLabel() != "GitLab" {
+		t.Fatalf("provider=%q label=%q", decoder.Provider(), decoder.SourceLabel())
+	}
+}
+
 func TestDecoderPipelineProjectHook(t *testing.T) {
 	payload := map[string]any{
 		"object_kind": "pipeline",

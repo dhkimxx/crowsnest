@@ -112,6 +112,7 @@ type NoteDetails struct {
 type CanonicalEvent struct {
 	EventKey      string               `json:"event_key"`
 	Source        Provider             `json:"source"`
+	SourceLabel   string               `json:"source_label,omitempty"`
 	SourceVersion string               `json:"source_version"`
 	SourceEvent   string               `json:"source_event"`
 	Kind          EventKind            `json:"kind"`

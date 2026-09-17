@@ -39,6 +39,10 @@ func (Decoder) Provider() domain.Provider {
 	return domain.ProviderGitLab
 }
 
+func (Decoder) SourceLabel() string {
+	return "GitLab"
+}
+
 func (Decoder) Version() string {
 	return version
 }
