@@ -225,6 +225,22 @@ Notification
 
 Tokens, app secrets, and raw payloads are never logged.
 
+## Card interactions
+
+Cards can carry actions. A click is delivered to the app over the Feishu long connection (`card.action.trigger`), normalized into a provider-neutral interaction, and handled by one application service.
+
+```text
+card.action.trigger
+  → Feishu interaction worker (long connection)
+  → InteractionService: dedupe → delivery lookup → action
+  → updated card or settings panel in the callback response
+```
+
+- A card is identified by its message id, which maps back to the delivery and recipient, so only the recipient's card can trigger an action for that delivery.
+- Interaction callbacks are deduplicated by event id and audited in `interaction_events` (actor, action, result).
+- The settings panel is rendered from the database on every open, so card state is never stale.
+- Actions that only change Crowsnest's own notification state (mute, unmute, panel navigation) live in this path. Changing external systems (GitLab) requires an explicit approval and audit boundary and is out of scope.
+
 ## LLM extension
 
 The LLM is an asynchronous `AIEnricher` that reads `CanonicalEvent` and deterministic notifications.

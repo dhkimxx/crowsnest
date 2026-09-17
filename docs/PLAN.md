@@ -98,7 +98,6 @@ Convert GitLab instance events into per-person actionable notifications and deli
 ## Out of scope for this version
 
 - LLM summaries, risk scoring, or suggested actions
-- Two-way Feishu card buttons and approval actions
 - GitLab MR approvals, comments, or label changes
 - Support for every GitLab event
 - Default delivery of confidential events
