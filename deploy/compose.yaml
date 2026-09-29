@@ -35,7 +35,7 @@ services:
     tmpfs:
       - /tmp
     init: true
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/healthz"]
       interval: 30s
